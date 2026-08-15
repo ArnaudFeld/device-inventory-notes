@@ -47,6 +47,11 @@ _CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]+")
 
 ZIGBEE2MQTT_BRIDGE = "zigbee2mqtt_bridge"
 
+# The FRITZ! integration creates one device per tracked network client with a
+# generic model. Only genuine FRITZ!DECT/Fon products are DECT; tracked clients
+# (WLAN/LAN) are not DECT and must be skipped.
+_FRITZ_DECT_MODEL_MARKERS = ("dect", "fon")
+
 # Fields that used to be HA-managed but no longer exist. Existing notes get
 # these removed on the next update.
 RETIRED_HA_FIELDS: frozenset[str] = frozenset({"transport"})
@@ -138,6 +143,23 @@ def _first_connection(device, conn_type: str) -> str | None:
     return None
 
 
+def _is_fritz_dect_device(dev, domain: str | None = None) -> bool:
+    """True only for genuine FRITZ! DECT products.
+
+    Two different FRITZ! integrations exist:
+    - "fritzbox"  -> FRITZ! Smart Home (FRITZ!DECT, HAN-FUN, FRITZ!Fon):
+      everything it exposes is a genuine DECT/RF device, regardless of model.
+    - "fritz"     -> the router integration. It creates a device for every
+      tracked network client (model "FRITZ!Box Tracked device") and for the
+      router/repeaters themselves. None of those are DECT; only actual DECT
+      product models count (models containing "dect"/"fon").
+    """
+    if domain == "fritzbox":
+        return True
+    model = (dev.model or "").lower()
+    return any(marker in model for marker in _FRITZ_DECT_MODEL_MARKERS)
+
+
 @dataclass
 class GenerateReport:
     dry_run: bool = False
@@ -151,6 +173,7 @@ class GenerateReport:
     skipped_unidentified: list[str] = field(default_factory=list)
     skipped_existing: list[str] = field(default_factory=list)
     no_protocol_count: int = 0
+    removed_stale: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     index_file: str = ""
     download_zip: str = ""
@@ -170,6 +193,7 @@ class GenerateReport:
             "skipped_unidentified": self.skipped_unidentified,
             "skipped_existing": self.skipped_existing,
             "skipped_no_protocol_count": self.no_protocol_count,
+            "removed_stale": self.removed_stale,
             "errors": self.errors,
             "index_file": self.index_file,
             "download_zip": self.download_zip,
@@ -288,6 +312,13 @@ class DeviceNoteGenerator:
             protocol, ieee = self._resolve_protocol(dev, entry_domain, self.extra_map)
             if protocol is None:
                 report.no_protocol_count += 1
+                stale = self._find_by_identifier(root, dev.id, None)
+                if stale is not None and not dry_run:
+                    try:
+                        stale.unlink()
+                        report.removed_stale.append(str(stale))
+                    except OSError as exc:
+                        report.errors.append(f"{name}: {exc}")
                 continue
             if ieee:
                 known_ieees.add(ieee)
@@ -324,9 +355,18 @@ class DeviceNoteGenerator:
             elif action == "existing":
                 report.skipped_existing.append(str(path))
 
-        report.orphaned = await asyncio.to_thread(
-            self._find_orphans, root, known_device_ids, known_ieees
-        )
+        if dry_run:
+            report.orphaned = await asyncio.to_thread(
+                self._find_orphans, root, known_device_ids, known_ieees
+            )
+        else:
+            report.orphaned = await asyncio.to_thread(
+                self._delete_orphans,
+                root,
+                report,
+                known_device_ids,
+                known_ieees,
+            )
         if not dry_run:
             index_path = await asyncio.to_thread(self._write_index, root, index_entries)
             report.index_file = str(index_path)
@@ -351,6 +391,8 @@ class DeviceNoteGenerator:
             if domain in extra_map:
                 return extra_map[domain], None
             if domain in PROTOCOL_MAP:
+                if domain in {"fritz", "fritzbox"} and not _is_fritz_dect_device(dev, domain):
+                    continue
                 return PROTOCOL_MAP[domain], None
         for identifier in dev.identifiers:
             domain = identifier[0]
@@ -362,6 +404,8 @@ class DeviceNoteGenerator:
             if domain in extra_map:
                 return extra_map[domain], None
             if domain in PROTOCOL_MAP:
+                if domain in {"fritz", "fritzbox"} and not _is_fritz_dect_device(dev, domain):
+                    continue
                 ieee = value if domain == "zha" else None
                 return PROTOCOL_MAP[domain], ieee
         return None, None
@@ -627,6 +671,26 @@ class DeviceNoteGenerator:
                 continue
             orphans.append(str(path))
         return orphans
+
+    def _delete_orphans(
+        self, root: Path, report: GenerateReport, known_device_ids: set[str], known_ieees: set[str]
+    ) -> list[str]:
+        """Delete notes whose registry id/ieee matches no known device.
+
+        Called after the main loop (non dry-run only). Returns the list of
+        deleted paths and records them in report.removed_stale.
+        """
+        orphans = self._find_orphans(root, known_device_ids, known_ieees)
+        deleted: list[str] = []
+        for path_str in orphans:
+            path = Path(path_str)
+            try:
+                path.unlink()
+                deleted.append(path_str)
+                report.removed_stale.append(path_str)
+            except OSError as exc:
+                report.errors.append(f"{path.name}: {exc}")
+        return deleted
 
     def _mirror_to_www(self, root: Path) -> tuple[str, str]:
         """Mirror the note files into www/ and build a zip for download."""

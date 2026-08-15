@@ -84,7 +84,7 @@ class DeviceInventoryRuntime:
             _LOGGER.info(
                 "Fertig: %d neu, %d aktualisiert, %d umbenannt, "
                 "%d ohne Protokoll, %d Infrastruktur, %d ignoriert, "
-                "%d Service, %d ohne Hersteller/Modell",
+                "%d Service, %d ohne Hersteller/Modell, %d verwaiste Notizen gelöscht",
                 len(report.created),
                 len(report.updated),
                 len(report.renamed),
@@ -93,6 +93,7 @@ class DeviceInventoryRuntime:
                 len(report.skipped_ignored),
                 len(report.skipped_service),
                 len(report.skipped_unidentified),
+                len(report.removed_stale),
             )
         if report.errors:
             _LOGGER.warning("%d Fehler beim Generieren", len(report.errors))
