@@ -1,0 +1,112 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Device Inventory Notes",
+        "description": "Exportiert Gerätedaten aus Home Assistant als Markdown-Notizen mit YAML-Frontmatter. Handfelder (z. B. kaufdatum, garantie_bis, notiz) werden niemals überschrieben. Herunterladen: {zip_link} und {notes_link}.",
+        "data": {
+          "layout": "Ordnerstruktur"
+        }
+      },
+      "fields": {
+        "title": "Felder auswählen",
+        "description": "Wähle die Felder, die in den Notizen stehen sollen. Handgepflegte Felder (lagerort, menge, kaufdatum, preis, gekauft_bei, garantie_bis, notiz) werden als leere Platzhalter angelegt und bei Updates niemals überschrieben.",
+        "data": {
+          "fields": "In den Notizen enthaltene Felder"
+        }
+      },
+      "extra": {
+        "title": "Zusätzliche Protokolle",
+        "description": "Ordne Integrationen ein Protokoll zu, deren Geräte Home Assistant nicht identifizieren kann. Die Zuordnung gilt nur für Geräte, die sonst kein Protokoll erhalten; später lässt sich der Wert je Notiz korrigieren (Updates überschreiben ihn nie). „Unbekannt“ sammelt sie in einem eigenen Abschnitt.",
+        "data": {
+          "extra_domains": "Hinzuzufügende Domains",
+          "extra_remove": "Bestehende Zuordnung entfernen",
+          "extra_protocol": "Protokoll für die ausgewählten Domains"
+        }
+      },
+      "settings": {
+        "title": "Weitere Einstellungen",
+        "data": {
+          "export_dir": "Export-Verzeichnis (relativ zur Home-Assistant-Konfiguration oder absolut)",
+          "merge_mode": "Merge-Modus",
+          "auto_update": "Automatisch aktualisieren, wenn sich Geräte/Entitäten ändern",
+          "ignored_devices": "Ignorierte Geräte (Geräte-ID oder Namensbestandteil, eine je Zeile)",
+          "force_include": "Trotzdem erstellen – z. B. Bridges/Koordinatoren (Geräte-ID oder Namensbestandteil, eine je Zeile)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Verbindung fehlgeschlagen"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Device Inventory Notes",
+        "description": "Passt an, wie und wo die Notizen erzeugt werden. Nach jedem Lauf liegt der Export als {notes_link} und als {zip_link} bereit. Abbrechen lässt die bisherigen Einstellungen unverändert.",
+        "data": {
+          "layout": "Ordnerstruktur",
+          "integration": "Integration",
+          "hersteller": "Hersteller",
+          "modell": "Modell",
+          "protokoll": "Protokoll",
+          "typ": "Typ",
+          "friendly_name": "Friendly Name",
+          "ieee_address": "IEEE Address",
+          "firmware": "Firmware",
+          "hardware_revision": "Hardware Revision",
+          "seriennummer": "Seriennummer",
+          "mac": "MAC",
+          "bereich": "Bereich",
+          "etage": "Etage",
+          "verbunden_über": "Verbunden Über",
+          "integrierung": "Integration",
+          "entity_count": "Entity Count",
+          "config_url": "Config URL",
+          "lagerort": "Lagerort",
+          "menge": "Menge",
+          "kaufdatum": "Kaufdatum",
+          "preis": "Preis",
+          "gekauft_bei": "Gekauft Bei",
+          "garantie_bis": "Garantie Bis",
+          "notiz": "Notiz"
+        }
+      },
+      "fields": {
+        "title": "Felder auswählen",
+        "description": "Wähle die Felder, die in den Notizen stehen sollen. Handgepflegte Felder (lagerort, menge, kaufdatum, preis, gekauft_bei, garantie_bis, notiz) werden als leere Platzhalter angelegt und bei Updates niemals überschrieben.",
+        "data": {
+          "fields": "In den Notizen enthaltene Felder"
+        }
+      },
+      "extra": {
+        "title": "Zusätzliche Protokolle",
+        "description": "Ordne Integrationen ein Protokoll zu, deren Geräte Home Assistant nicht identifizieren kann. Die Zuordnung gilt nur für Geräte, die sonst kein Protokoll erhalten; später lässt sich der Wert je Notiz korrigieren (Updates überschreiben ihn nie). „Unbekannt“ sammelt sie in einem eigenen Abschnitt.",
+        "data": {
+          "extra_domains": "Hinzuzufügende Domains",
+          "extra_remove": "Bestehende Zuordnung entfernen",
+          "extra_protocol": "Protokoll für die ausgewählten Domains"
+        }
+      },
+      "settings": {
+        "title": "Weitere Einstellungen",
+        "data": {
+          "export_dir": "Export-Verzeichnis (relativ zur Home-Assistant-Konfiguration oder absolut)",
+          "merge_mode": "Merge-Modus",
+          "auto_update": "Automatisch aktualisieren, wenn sich Geräte/Entitäten ändern",
+          "ignored_devices": "Ignorierte Geräte (Geräte-ID oder Namensbestandteil, eine je Zeile)",
+          "force_include": "Trotzdem erstellen – z. B. Bridges/Koordinatoren (Geräte-ID oder Namensbestandteil, eine je Zeile)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Verbindung fehlgeschlagen"
+    }
+  },
+  "services": {
+    "scan_and_generate": {
+      "name": "Geräte-Notizen erzeugen/aktualisieren",
+      "description": "Erzeugt oder aktualisiert die Markdown-Notizen für alle Geräte im Export-Verzeichnis. Handgepflegte Felder (lagerort, menge, kaufdatum, preis, gekauft_bei, garantie_bis, notiz) werden nie überschrieben."
+    }
+  }
+}

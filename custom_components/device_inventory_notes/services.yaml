@@ -1,0 +1,12 @@
+scan_and_generate:
+  name: Geräte-Notizen erzeugen/aktualisieren
+  description: >
+    Erzeugt oder aktualisiert die Markdown-Notizen für alle Geräte im Export-Verzeichnis.
+    Handgepflegte Felder (lagerort, menge, kaufdatum, preis, gekauft_bei, garantie_bis,
+    notiz) werden dabei nie überschrieben.
+  fields:
+    dry_run:
+      name: Trockenlauf
+      description: Nur analysieren und berichten, keine Dateien schreiben.
+      selector:
+        boolean:

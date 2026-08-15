@@ -1,0 +1,112 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Device Inventory Notes",
+        "description": "Exports device data from Home Assistant as Markdown notes with YAML frontmatter. Hand-maintained fields (e.g. purchase date, warranty, notes) are never overwritten. Download: {zip_link} and {notes_link}.",
+        "data": {
+          "layout": "Folder layout"
+        }
+      },
+      "fields": {
+        "title": "Select fields",
+        "description": "Choose which fields appear in the notes. Hand-maintained fields (lagerort, menge, kaufdatum, preis, gekauft_bei, garantie_bis, notiz) are created as empty placeholders and never overwritten on updates.",
+        "data": {
+          "fields": "Fields included in the notes"
+        }
+      },
+      "extra": {
+        "title": "Additional protocols",
+        "description": "Assign a protocol to integrations whose devices Home Assistant cannot identify. The mapping only applies to devices that otherwise get no protocol; you can correct the value later in each note (updates never overwrite it). Unbekannt groups them under a separate section.",
+        "data": {
+          "extra_domains": "Domains to add",
+          "extra_remove": "Remove existing mapping",
+          "extra_protocol": "Protocol for the selected domains"
+        }
+      },
+      "settings": {
+        "title": "Further settings",
+        "data": {
+          "export_dir": "Export directory (relative to the Home Assistant config dir or absolute)",
+          "merge_mode": "Merge mode",
+          "auto_update": "Update automatically when devices/entities change",
+          "ignored_devices": "Ignored devices (device ID or name fragment, one per line)",
+          "force_include": "Force include – e.g. bridges/coordinators (device ID or name fragment, one per line)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Connection failed"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Device Inventory Notes",
+        "description": "Controls how and where notes are generated. After each run the export is available as a {notes_link} and as a {zip_link}. Cancel to keep current settings.",
+        "data": {
+          "layout": "Folder layout",
+          "integration": "Integration",
+          "hersteller": "Manufacturer",
+          "modell": "Model",
+          "protokoll": "Protocol",
+          "typ": "Type",
+          "friendly_name": "Friendly Name",
+          "ieee_address": "IEEE Address",
+          "firmware": "Firmware",
+          "hardware_revision": "Hardware Revision",
+          "seriennummer": "Serial Number",
+          "mac": "MAC",
+          "bereich": "Area",
+          "etage": "Floor",
+          "verbunden_über": "Connected Over",
+          "integrierung": "Integration",
+          "entity_count": "Entity Count",
+          "config_url": "Config URL",
+          "lagerort": "Storage Location",
+          "menge": "Quantity",
+          "kaufdatum": "Purchase Date",
+          "preis": "Price",
+          "gekauft_bei": "Purchased At",
+          "garantie_bis": "Warranty Until",
+          "notiz": "Note"
+        }
+      },
+      "fields": {
+        "title": "Select fields",
+        "description": "Choose which fields appear in the notes. Hand-maintained fields (lagerort, menge, kaufdatum, preis, gekauft_bei, garantie_bis, notiz) are created as empty placeholders and never overwritten on updates.",
+        "data": {
+          "fields": "Fields included in the notes"
+        }
+      },
+      "extra": {
+        "title": "Additional protocols",
+        "description": "Assign a protocol to integrations whose devices Home Assistant cannot identify. The mapping only applies to devices that otherwise get no protocol; you can correct the value later in each note (updates never overwrite it). Unbekannt groups them under a separate section.",
+        "data": {
+          "extra_domains": "Domains to add",
+          "extra_remove": "Remove existing mapping",
+          "extra_protocol": "Protocol for the selected domains"
+        }
+      },
+      "settings": {
+        "title": "Further settings",
+        "data": {
+          "export_dir": "Export directory (relative to the Home Assistant config dir or absolute)",
+          "merge_mode": "Merge mode",
+          "auto_update": "Update automatically when devices/entities change",
+          "ignored_devices": "Ignored devices (device ID or name fragment, one per line)",
+          "force_include": "Force include – e.g. bridges/coordinators (device ID or name fragment, one per line)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Connection failed"
+    }
+  },
+  "services": {
+    "scan_and_generate": {
+      "name": "Generate/update device notes",
+      "description": "Generates or updates the Markdown notes for all devices in the export directory. Hand-maintained fields (lagerort, menge, kaufdatum, preis, gekauft_bei, garantie_bis, notiz) are never overwritten."
+    }
+  }
+}
