@@ -15,6 +15,13 @@
           "fields": "In den Notizen enthaltene Felder"
         }
       },
+      "order": {
+        "title": "Reihenfolge der Felder",
+        "description": "Lege die Reihenfolge der Felder im Frontmatter fest: eine Zeile je Feld, oben zuerst. Leere Zeilen werden ignoriert. Die ausgewählten Felder sind bereits vorbelegt.",
+        "data": {
+          "field_order": "Reihenfolge (eine Zeile je Feld)"
+        }
+      },
       "extra": {
         "title": "Zusätzliche Protokolle",
         "description": "Ordne Integrationen ein Protokoll zu, deren Geräte Home Assistant nicht identifizieren kann. Die Zuordnung gilt nur für Geräte, die sonst kein Protokoll erhalten; später lässt sich der Wert je Notiz korrigieren (Updates überschreiben ihn nie). „Unbekannt“ sammelt sie in einem eigenen Abschnitt.",
@@ -77,6 +84,13 @@
         "description": "Wähle die Felder, die in den Notizen stehen sollen. Handgepflegte Felder (lagerort, menge, kaufdatum, preis, gekauft_bei, garantie_bis, notiz) werden als leere Platzhalter angelegt und bei Updates niemals überschrieben.",
         "data": {
           "fields": "In den Notizen enthaltene Felder"
+        }
+      },
+      "order": {
+        "title": "Reihenfolge der Felder",
+        "description": "Lege die Reihenfolge der Felder im Frontmatter fest: eine Zeile je Feld, oben zuerst. Leere Zeilen werden ignoriert. Die ausgewählten Felder sind bereits vorbelegt.",
+        "data": {
+          "field_order": "Reihenfolge (eine Zeile je Feld)"
         }
       },
       "extra": {

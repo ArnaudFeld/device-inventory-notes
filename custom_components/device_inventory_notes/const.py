@@ -15,6 +15,7 @@ CONF_AUTO_UPDATE: Final = "auto_update"
 CONF_IGNORED_DEVICES: Final = "ignored_devices"
 CONF_FORCE_INCLUDE: Final = "force_include"
 CONF_FIELDS: Final = "fields"
+CONF_FIELD_ORDER: Final = "field_order"
 
 LAYOUT_PROTOCOL: Final = "protocol"
 LAYOUT_AREA: Final = "area"
@@ -100,6 +101,9 @@ FIELD_LABEL_TO_KEY: Final[dict[str, str]] = {
     "Notiz": "notiz",
 }
 
+# Inverse mapping (internal key -> display label) for pre-filling the order step.
+KEY_TO_LABEL: Final[dict[str, str]] = {v: k for k, v in FIELD_LABEL_TO_KEY.items()}
+
 # Fields the user can select in the options flow (name and ha_device_id are
 # mandatory and always written). Values match FIELD_LABEL_TO_KEY so that the
 # defaults can be pre-selected in the flow.
@@ -116,30 +120,30 @@ DEFAULT_FIELDS: Final = (
 
 # Field order mirrors the existing note templates.
 FIELD_ORDER: Final = (
-    "name",
     "typ",
     "hersteller",
     "modell",
     "protokoll",
-    "lagerort",
-    "menge",
-    "kaufdatum",
-    "preis",
-    "gekauft_bei",
-    "garantie_bis",
     "friendly_name",
+    "name",
     "ieee_address",
     "ha_device_id",
     "firmware",
     "hardware_revision",
     "seriennummer",
     "mac",
+    "verbunden_über",
     "bereich",
     "etage",
-    "verbunden_über",
     "Integration",
     "entity_count",
     "config_url",
+    "lagerort",
+    "menge",
+    "kaufdatum",
+    "preis",
+    "gekauft_bei",
+    "garantie_bis",
     "notiz",
 )
 

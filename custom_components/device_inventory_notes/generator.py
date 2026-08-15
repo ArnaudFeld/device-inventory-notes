@@ -21,6 +21,7 @@ from homeassistant.helpers import floor_registry as flr
 from .const import (
     CONF_EXPORT_DIR,
     CONF_EXTRA_MAP,
+    CONF_FIELD_ORDER,
     CONF_FIELDS,
     CONF_FORCE_INCLUDE,
     CONF_IGNORED_DEVICES,
@@ -114,7 +115,7 @@ def _quote(value: str) -> str:
 def serialize_note(
     fields: dict[str, str], order: tuple[str, ...], emit_empty: frozenset[str] = frozenset()
 ) -> str:
-    """Serialize frontmatter in the fixed field order, skipping empty values.
+    """Serialize frontmatter in the given field order, skipping empty values.
 
     Keys in emit_empty are written even when empty ("" placeholders for
     hand-maintained fields).
@@ -199,6 +200,23 @@ class DeviceNoteGenerator:
                 FIELD_LABEL_TO_KEY.get(field, field) for field in user_fields
             }
         self.fields: set[str] = selected | {"name", "ha_device_id"}
+
+        # Field order for the note frontmatter. The config flow stores a
+        # user-defined order (internal keys); any selected field not listed
+        # keeps its default FIELD_ORDER position. Falls back to FIELD_ORDER.
+        user_order = options.get(CONF_FIELD_ORDER) or []
+        if user_order:
+            ordered = [key for key in user_order if key in self.fields]
+            self.field_order: tuple[str, ...] = tuple(ordered) + tuple(
+                key for key in FIELD_ORDER if key in self.fields and key not in ordered
+            )
+        else:
+            self.field_order = FIELD_ORDER
+        # "notiz" is always the last field, regardless of any user order.
+        if "notiz" in self.fields:
+            self.field_order = tuple(
+                key for key in self.field_order if key != "notiz"
+            ) + ("notiz",)
 
     def export_root(self) -> Path:
         path = self.export_dir
@@ -501,7 +519,7 @@ class DeviceNoteGenerator:
 
         if existing_path is None:
             final = {}
-            for key in FIELD_ORDER:
+            for key in self.field_order:
                 if key in computed and key in self.fields:
                     final[key] = computed[key]
                 elif key in HAND_FIELDS and key in self.fields:
@@ -518,7 +536,7 @@ class DeviceNoteGenerator:
                 return "error", existing_path, None
             existing_fields, existing_body = parsed
             final = {}
-            for key in FIELD_ORDER:
+            for key in self.field_order:
                 if key in existing_fields:
                     if key in RETIRED_HA_FIELDS:
                         continue
@@ -544,7 +562,7 @@ class DeviceNoteGenerator:
 
         folder.mkdir(parents=True, exist_ok=True)
         emit_empty = frozenset(key for key in HAND_FIELDS if key in self.fields)
-        content = serialize_note(final, FIELD_ORDER, emit_empty)
+        content = serialize_note(final, self.field_order, emit_empty)
         if existing_body:
             content += "\n" + existing_body
         content += "\n"

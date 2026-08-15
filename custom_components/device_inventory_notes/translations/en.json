@@ -15,6 +15,13 @@
           "fields": "Fields included in the notes"
         }
       },
+      "order": {
+        "title": "Field order",
+        "description": "Set the order of fields in the frontmatter: one field per line, top first. Empty lines are ignored. The selected fields are pre-filled.",
+        "data": {
+          "field_order": "Order (one field per line)"
+        }
+      },
       "extra": {
         "title": "Additional protocols",
         "description": "Assign a protocol to integrations whose devices Home Assistant cannot identify. The mapping only applies to devices that otherwise get no protocol; you can correct the value later in each note (updates never overwrite it). Unbekannt groups them under a separate section.",
@@ -77,6 +84,13 @@
         "description": "Choose which fields appear in the notes. Hand-maintained fields (lagerort, menge, kaufdatum, preis, gekauft_bei, garantie_bis, notiz) are created as empty placeholders and never overwritten on updates.",
         "data": {
           "fields": "Fields included in the notes"
+        }
+      },
+      "order": {
+        "title": "Field order",
+        "description": "Set the order of fields in the frontmatter: one field per line, top first. Empty lines are ignored. The selected fields are pre-filled.",
+        "data": {
+          "field_order": "Order (one field per line)"
         }
       },
       "extra": {
