@@ -17,6 +17,8 @@ CONF_FORCE_INCLUDE: Final = "force_include"
 CONF_FIELDS: Final = "fields"
 CONF_FIELD_ORDER: Final = "field_order"
 CONF_OBSIDIAN_BASE: Final = "obsidian_base"
+CONF_ONLY_AREAS: Final = "only_areas"
+CONF_TYPE_MAP: Final = "type_map"
 
 LAYOUT_PROTOCOL: Final = "protocol"
 LAYOUT_AREA: Final = "area"
@@ -154,11 +156,15 @@ FIELD_ORDER: Final = (
     "notiz",
 )
 
-# Dataview overview pages generated into the export root and each protocol
-# folder. Filenames are aligned with the Obsidian vault naming convention.
+# Overviews and metadata files living in the export root.
 OVERVIEW_ROOT_FILENAME: Final = "01-Übersicht Aktoren.md"
 OVERVIEW_FILENAME_TEMPLATE: Final = "01-Übersicht {proto}.md"
 LEGACY_INDEX_FILENAME: Final = "00 - Geräte-Übersicht.md"
+
+# Change-log between runs: persisted last-run snapshot + generated diff.
+LAST_STATE_FILENAME: Final = ".din_last_state.json"
+CHANGELOG_FILENAME: Final = "CHANGELOG.md"
+CHANGELOG_MAX_ENTRIES: Final = 20
 
 # Protocols that get an overview page, always (also for empty folders).
 OVERVIEW_PROTOCOLS: Final = (

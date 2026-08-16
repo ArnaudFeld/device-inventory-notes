@@ -24,6 +24,8 @@ from .const import (
     CONF_LAYOUT,
     CONF_MERGE_MODE,
     CONF_OBSIDIAN_BASE,
+    CONF_ONLY_AREAS,
+    CONF_TYPE_MAP,
     DEFAULT_AUTO_UPDATE,
     DEFAULT_EXPORT_DIR,
     DEFAULT_FIELDS,
@@ -272,6 +274,14 @@ def _schema_settings(current: dict) -> vol.Schema:
             vol.Optional(
                 CONF_FORCE_INCLUDE,
                 default=current.get(CONF_FORCE_INCLUDE, ""),
+            ): selector.TextSelector(selector.TextSelectorConfig(multiline=True)),
+            vol.Optional(
+                CONF_ONLY_AREAS,
+                default=current.get(CONF_ONLY_AREAS, ""),
+            ): selector.TextSelector(selector.TextSelectorConfig(multiline=True)),
+            vol.Optional(
+                CONF_TYPE_MAP,
+                default=current.get(CONF_TYPE_MAP, ""),
             ): selector.TextSelector(selector.TextSelectorConfig(multiline=True)),
         }
     )

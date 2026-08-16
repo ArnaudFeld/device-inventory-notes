@@ -39,7 +39,9 @@
           "merge_mode": "Merge mode",
           "auto_update": "Update automatically when devices/entities change",
           "ignored_devices": "Ignored devices (device ID or name fragment, one per line)",
-          "force_include": "Force include – e.g. bridges/coordinators (device ID or name fragment, one per line)"
+          "force_include": "Force include – e.g. bridges/coordinators (device ID or name fragment, one per line)",
+          "only_areas": "Only areas (area name or name fragment, one per line; empty = all)",
+          "type_map": "Override type labels (format: domain: label, one per line; e.g. light: Lamp)"
         }
       }
     },
@@ -112,7 +114,9 @@
           "merge_mode": "Merge mode",
           "auto_update": "Update automatically when devices/entities change",
           "ignored_devices": "Ignored devices (device ID or name fragment, one per line)",
-          "force_include": "Force include – e.g. bridges/coordinators (device ID or name fragment, one per line)"
+          "force_include": "Force include – e.g. bridges/coordinators (device ID or name fragment, one per line)",
+          "only_areas": "Only areas (area name or name fragment, one per line; empty = all)",
+          "type_map": "Override type labels (format: domain: label, one per line; e.g. light: Lamp)"
         }
       }
     },

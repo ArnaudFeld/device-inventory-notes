@@ -75,14 +75,83 @@ class DeviceInventoryRuntime:
                 _LOGGER.exception("Fehler beim Generieren der Geräte-Notizen")
                 raise
         self._log_report(report)
+        if not dry_run:
+            await self._notify_changes(report)
         return report.to_dict()
+
+    async def _notify_changes(self, report: GenerateReport) -> None:
+        """Persistent notification after a run, only when something changed.
+
+        The notification_id is stable, so a new run replaces the previous
+        summary instead of stacking up notifications.
+        """
+        created = report.changed_created
+        updated = report.changed_updated
+        renamed = report.changed_renamed
+        removed = report.changed_removed
+        if not (created or updated or renamed or removed):
+            return
+
+        if self.hass.config.language == "de":
+            title = "Geräte-Inventar aktualisiert"
+            if created:
+                line_new = f"<b>Neu:</b> {len(created)}"
+            else:
+                line_new = ""
+            if updated:
+                line_updated = f"<b>Geändert:</b> {len(updated)}"
+            else:
+                line_updated = ""
+            if renamed:
+                line_renamed = f"<b>Umbenannt:</b> {len(renamed)}"
+            else:
+                line_renamed = ""
+            if removed:
+                line_removed = f"<b>Entfernt:</b> {len(removed)}"
+            else:
+                line_removed = ""
+            details = []
+            for path in created[:5]:
+                details.append(f"  • + {path}")
+            for old_path, new_path in renamed[:5]:
+                details.append(f"  • ↔ {old_path} → {new_path}")
+            for path in updated[:5]:
+                details.append(f"  • ~ {path}")
+            for path in removed[:5]:
+                details.append(f"  • - {path}")
+            if len(created) + len(updated) + len(renamed) + len(removed) > 5:
+                details.append("  • …")
+            message = "<br>".join(
+                part for part in (line_new, line_updated, line_renamed, line_removed) if part
+            )
+            if details:
+                message += "<br>" + "<br>".join(details)
+        else:
+            title = "Device inventory updated"
+            counts = [
+                f"{len(created)} new",
+                f"{len(updated)} updated",
+                f"{len(renamed)} renamed",
+                f"{len(removed)} removed",
+            ]
+            counts = [c for c in counts if not c.startswith("0 ")]
+            message = ", ".join(counts)
+        await self.hass.services.async_call(
+            "persistent_notification",
+            "create",
+            {
+                "notification_id": f"{DOMAIN}_run",
+                "title": title,
+                "message": message,
+            },
+        )
 
     def _log_report(self, report: GenerateReport) -> None:
         if report.dry_run:
             _LOGGER.info(
                 "TROCKENLAUF: %d angelegt, %d aktualisiert, %d umbenannt, "
                 "%d ohne Protokoll, %d Infrastruktur, %d ignoriert, "
-                "%d Service, %d ohne Hersteller/Modell",
+                "%d Service, %d ohne Hersteller/Modell, %d Bereichs-gefiltert",
                 len(report.created),
                 len(report.updated),
                 len(report.renamed),
@@ -91,12 +160,14 @@ class DeviceInventoryRuntime:
                 len(report.skipped_ignored),
                 len(report.skipped_service),
                 len(report.skipped_unidentified),
+                len(report.skipped_area),
             )
         else:
             _LOGGER.info(
                 "Fertig: %d neu, %d aktualisiert, %d umbenannt, "
                 "%d ohne Protokoll, %d Infrastruktur, %d ignoriert, "
-                "%d Service, %d ohne Hersteller/Modell, %d verwaiste Notizen gelöscht",
+                "%d Service, %d ohne Hersteller/Modell, %d Bereichs-gefiltert, "
+                "%d verwaiste Notizen gelöscht, %d geändert seit letztem Lauf",
                 len(report.created),
                 len(report.updated),
                 len(report.renamed),
@@ -105,7 +176,12 @@ class DeviceInventoryRuntime:
                 len(report.skipped_ignored),
                 len(report.skipped_service),
                 len(report.skipped_unidentified),
+                len(report.skipped_area),
                 len(report.removed_stale),
+                len(report.changed_created)
+                + len(report.changed_updated)
+                + len(report.changed_renamed)
+                + len(report.changed_removed),
             )
         if report.errors:
             _LOGGER.warning("%d Fehler beim Generieren", len(report.errors))

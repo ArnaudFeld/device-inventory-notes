@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import re
 import shutil
 import zipfile
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 
 import yaml
@@ -18,6 +21,8 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import floor_registry as flr
 
 from .const import (
+    CHANGELOG_FILENAME,
+    CHANGELOG_MAX_ENTRIES,
     CONF_EXPORT_DIR,
     CONF_EXTRA_MAP,
     CONF_FIELD_ORDER,
@@ -27,6 +32,8 @@ from .const import (
     CONF_LAYOUT,
     CONF_MERGE_MODE,
     CONF_OBSIDIAN_BASE,
+    CONF_ONLY_AREAS,
+    CONF_TYPE_MAP,
     DEFAULT_EXPORT_DIR,
     DEFAULT_FIELDS,
     DEFAULT_OBSIDIAN_BASE,
@@ -35,6 +42,7 @@ from .const import (
     GENERATED_ON_CREATE_FIELDS,
     HA_FIELDS,
     HAND_FIELDS,
+    LAST_STATE_FILENAME,
     LAYOUT_AREA,
     LEGACY_INDEX_FILENAME,
     MERGE_MODE_CREATE_ONLY,
@@ -101,6 +109,28 @@ def _filter_values(raw: str) -> list[str]:
         for line in (raw or "").splitlines()
         if line.strip() and not line.strip().startswith("#")
     ]
+
+
+def parse_type_map(raw: str) -> dict[str, str]:
+    """Parse multiline "domain: label" lines into a mapping.
+
+    Lines starting with '#' and empty lines are ignored. The domain is
+    lower-cased; the label keeps its case. Later lines win for a repeated
+    domain.
+    """
+    mapping: dict[str, str] = {}
+    for line in (raw or "").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if ":" not in stripped:
+            continue
+        domain, _, label = stripped.partition(":")
+        domain = domain.strip().lower()
+        label = label.strip()
+        if domain and label:
+            mapping[domain] = label
+    return mapping
 
 
 def matches_filter(raw: str, device, name: str) -> bool:
@@ -194,6 +224,7 @@ class GenerateReport:
     skipped_ignored: list[str] = field(default_factory=list)
     skipped_service: list[str] = field(default_factory=list)
     skipped_unidentified: list[str] = field(default_factory=list)
+    skipped_area: list[str] = field(default_factory=list)
     skipped_existing: list[str] = field(default_factory=list)
     no_protocol_count: int = 0
     removed_stale: list[str] = field(default_factory=list)
@@ -202,6 +233,11 @@ class GenerateReport:
     download_zip: str = ""
     download_dir: str = ""
     orphaned: list[str] = field(default_factory=list)
+    # Changes since the last run, derived from the persisted snapshot.
+    changed_created: list[str] = field(default_factory=list)
+    changed_updated: list[str] = field(default_factory=list)
+    changed_renamed: list[tuple[str, str]] = field(default_factory=list)
+    changed_removed: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -214,6 +250,7 @@ class GenerateReport:
             "skipped_ignored": self.skipped_ignored,
             "skipped_service": self.skipped_service,
             "skipped_unidentified": self.skipped_unidentified,
+            "skipped_area": self.skipped_area,
             "skipped_existing": self.skipped_existing,
             "skipped_no_protocol_count": self.no_protocol_count,
             "removed_stale": self.removed_stale,
@@ -222,6 +259,10 @@ class GenerateReport:
             "download_zip": self.download_zip,
             "download_dir": self.download_dir,
             "orphaned": self.orphaned,
+            "changed_created": self.changed_created,
+            "changed_updated": self.changed_updated,
+            "changed_renamed": [f"{old} -> {new}" for old, new in self.changed_renamed],
+            "changed_removed": self.changed_removed,
         }
 
 
@@ -237,7 +278,10 @@ class DeviceNoteGenerator:
         self.merge_mode = options.get(CONF_MERGE_MODE)
         self.ignored = options.get(CONF_IGNORED_DEVICES, "")
         self.force_include = options.get(CONF_FORCE_INCLUDE, "")
+        self.only_areas = _filter_values(options.get(CONF_ONLY_AREAS, ""))
         self.extra_map = dict(options.get(CONF_EXTRA_MAP) or {})
+        # User-configured type labels override/extend TYPE_MAP.
+        self.custom_type_map = parse_type_map(options.get(CONF_TYPE_MAP, ""))
         # Always start with DEFAULT_FIELDS, then add any user-selected fields.
         # The config flow stores display labels; resolve them to the internal
         # frontmatter keys. Unknown entries pass through unchanged.
@@ -333,11 +377,14 @@ class DeviceNoteGenerator:
             elif not dev.manufacturer and not dev.model:
                 report.skipped_unidentified.append(f"{name} ({dev.id})")
                 continue
+            elif self.only_areas and not self._matches_area_filter(dev, area_by_id):
+                report.skipped_area.append(f"{name} ({dev.id})")
+                continue
 
             protocol, ieee = self._resolve_protocol(dev, entry_domain, self.extra_map)
             if protocol is None:
                 report.no_protocol_count += 1
-                stale = self._find_by_identifier(root, dev.id, None)
+                stale = await asyncio.to_thread(self._find_by_identifier, root, dev.id, None)
                 if stale is not None and not dry_run:
                     try:
                         stale.unlink()
@@ -394,11 +441,154 @@ class DeviceNoteGenerator:
         if not dry_run:
             index_path = await asyncio.to_thread(self._write_overviews, root)
             report.index_file = str(index_path)
+            await asyncio.to_thread(self._write_changelog, root, report)
             report.download_zip, report.download_dir = await asyncio.to_thread(
                 self._mirror_to_www, root
             )
 
         return report
+
+    def _snapshot_notes(self, root: Path) -> dict[str, dict]:
+        """Relative path -> {device_id, ieee, hash} for every generated note.
+
+        Overviews and the changelog are excluded. The hash covers the full
+        file content, so hand-edits to frontmatter or body also register as
+        an update.
+        """
+        notes: dict[str, dict] = {}
+        for path in sorted(root.glob("**/*.md")):
+            if _is_generated_overview(path) or path.name == CHANGELOG_FILENAME:
+                continue
+            try:
+                text = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            parsed = parse_note(text)
+            if not parsed:
+                continue
+            fields, _body = parsed
+            notes[str(path.relative_to(root))] = {
+                "device_id": fields.get("ha_device_id", ""),
+                "ieee": fields.get("ieee_address", ""),
+                "hash": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+            }
+        return notes
+
+    def _load_last_state(self, root: Path) -> dict[str, dict]:
+        state_path = root / LAST_STATE_FILENAME
+        try:
+            data = json.loads(state_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+        if not isinstance(data, dict):
+            return {}
+        return data
+
+    def _save_last_state(self, root: Path, state: dict[str, dict]) -> None:
+        state_path = root / LAST_STATE_FILENAME
+        state_path.write_text(
+            json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+
+    @staticmethod
+    def _diff_states(
+        old: dict[str, dict], new: dict[str, dict]
+    ) -> tuple[list[str], list[str], list[tuple[str, str]], list[str]]:
+        """Compare two snapshots: (created, updated, renamed, removed).
+
+        Renames are detected via a stable identity (ha_device_id, falling
+        back to ieee_address); content changes on a renamed note count as
+        a rename only.
+        """
+        created: list[str] = []
+        updated: list[str] = []
+        renamed: list[tuple[str, str]] = []
+        removed: list[str] = []
+
+        old_by_id: dict[str, str] = {}
+        for path, info in old.items():
+            dev_id = info.get("device_id") or info.get("ieee") or ""
+            if dev_id:
+                old_by_id.setdefault(dev_id, path)
+        new_by_id: dict[str, str] = {}
+        for path, info in new.items():
+            dev_id = info.get("device_id") or info.get("ieee") or ""
+            if dev_id:
+                new_by_id.setdefault(dev_id, path)
+
+        renamed_old: set[str] = set()
+        renamed_new: set[str] = set()
+        for dev_id, old_path in old_by_id.items():
+            new_path = new_by_id.get(dev_id)
+            if new_path and new_path != old_path:
+                renamed.append((old_path, new_path))
+                renamed_old.add(old_path)
+                renamed_new.add(new_path)
+
+        for path, info in new.items():
+            if path in old:
+                if old[path].get("hash") != info.get("hash"):
+                    updated.append(path)
+            elif path not in renamed_new:
+                created.append(path)
+
+        for path in old:
+            if path not in new and path not in renamed_old:
+                removed.append(path)
+
+        return created, updated, renamed, removed
+
+    def _write_changelog(self, root: Path, report: GenerateReport) -> None:
+        """Persist the new snapshot and append a dated entry to CHANGELOG.md.
+
+        The changelog only grows when something actually changed; the file
+        keeps the most recent CHANGELOG_MAX_ENTRIES sections. Overviews are
+        ignored by the orphan scan, so the changelog is never deleted.
+        """
+        new_state = self._snapshot_notes(root)
+        old_state = self._load_last_state(root)
+        if not old_state:
+            # First run (no previous snapshot): establish a baseline without
+            # reporting every existing note as new.
+            self._save_last_state(root, new_state)
+            return
+        created, updated, renamed, removed = self._diff_states(old_state, new_state)
+        report.changed_created = created
+        report.changed_updated = updated
+        report.changed_renamed = renamed
+        report.changed_removed = removed
+        self._save_last_state(root, new_state)
+
+        if not (created or updated or renamed or removed):
+            return
+
+        changelog_path = root / CHANGELOG_FILENAME
+        old_sections: list[str] = []
+        if changelog_path.exists():
+            try:
+                text = changelog_path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                text = ""
+            for section in re.split(r"\n(?=## )", text):
+                if section.startswith("## "):
+                    old_sections.append(section.rstrip("\n"))
+
+        lines = [f"## {datetime.now().strftime('%Y-%m-%d %H:%M')}"]
+        for path in created:
+            lines.append(f"+ {path}")
+        for old_path, new_path in renamed:
+            lines.append(f"↔ {old_path} → {new_path}")
+        for path in updated:
+            lines.append(f"~ {path}")
+        for path in removed:
+            lines.append(f"- {path}")
+        section = "\n".join(lines)
+
+        sections = [section] + old_sections[: CHANGELOG_MAX_ENTRIES - 1]
+        header = "# CHANGELOG\n\n"
+        changelog_path.write_text(
+            header + "\n\n".join(sections) + "\n", encoding="utf-8"
+        )
 
     @staticmethod
     def _resolve_protocol(
@@ -468,6 +658,31 @@ class DeviceNoteGenerator:
         ):
             return "Sensor"
         return None
+
+    def _infer_type_custom(self, domains: set[str]) -> str | None:
+        """Type suggestion honoring user-configured labels.
+
+        User mappings win over TYPE_MAP; anything else falls back to the
+        built-in inference (TYPE_MAP first, then the Sensor fallback).
+        """
+        if not domains:
+            return None
+        for domain, label in self.custom_type_map.items():
+            if domain in domains:
+                return label
+        return self._infer_type(domains)
+
+    def _matches_area_filter(self, dev, area_by_id: dict[str, str]) -> bool:
+        """True if the device area matches at least one configured filter value.
+
+        Matches are case-insensitive substring checks against the area name.
+        Devices without an area never match (only_areas is non-empty here).
+        """
+        area = area_by_id.get(dev.area_id)
+        if not area:
+            return False
+        area_lower = area.lower()
+        return any(fragment in area_lower for fragment in self.only_areas)
 
     def _folder_name(self, dev, protocol: str, area_by_id: dict[str, str]) -> str:
         if self.layout == LAYOUT_AREA:
@@ -556,7 +771,7 @@ class DeviceNoteGenerator:
         if getattr(dev, "configuration_url", None):
             computed["config_url"] = str(dev.configuration_url)
 
-        inferred_typ = self._infer_type(domains)
+        inferred_typ = self._infer_type_custom(domains)
         if inferred_typ:
             computed["typ"] = inferred_typ
 

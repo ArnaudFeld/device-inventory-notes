@@ -27,6 +27,20 @@ eine Notiz pro Gerät, passend zum bestehenden Inventar-System der Obsidian-Vaul
   bekannte Protokoll-Zuordnung landen in `skipped_no_protocol_count`.
 - Automatische Aktualisierung: 10 Sekunden nach jeder Änderung an Geräte-,
   Entitäts- oder Bereichs-Registry wird neu generiert (mit Debounce).
+- Nur Bereiche: Beschränkt die Notizen auf Geräte in bestimmten Bereichen
+  (Bereichsname oder Namensbestandteil, eine je Zeile). Geräte in anderen
+  Bereichen werden als `skipped_area` übersprungen – `Trotzdem erstellen`
+  gewinnt immer.
+- Typ-Labels überschreiben: `domain: Label`-Zeilen (z. B. `light: Lampe`)
+  überschreiben bzw. ergänzen die eingebaute Typ-Zuordnung.
+- Änderungsprotokoll: Nach jedem Lauf wird `CHANGELOG.md` im Export-Verzeichnis
+  aktualisiert (die letzten 20 Läufe), basierend auf einem Vergleich zum
+  vorherigen Stand (`.din_last_state.json`). Es werden nur echte Änderungen
+  protokolliert: neu, geändert, umbenannt, entfernt.
+- Benachrichtigung nach dem Lauf: Wenn sich seit dem letzten Lauf wirklich
+  etwas geändert hat, erscheint eine ersetzbare Benachrichtigung mit einer
+  Zusammenfassung. Der erste Lauf nach der Einrichtung etabliert nur den
+  Ausgangsstand und meldet nichts.
 
 ## Einrichtung
 
@@ -52,6 +66,8 @@ eine Notiz pro Gerät, passend zum bestehenden Inventar-System der Obsidian-Vaul
 | Feldauswahl | mehrere Felder wählbar | Welche HA-Felder in Notizen geschrieben werden (`name` und `ha_device_id` sind immer dabei) |
 | Ignorierte Geräte | Geräte-ID oder Namensbestandteil, eine je Zeile | Geräte werden übersprungen |
 | Trotzdem erstellen | Geräte-ID oder Namensbestandteil, eine je Zeile | erzwingt Mitnahme (überschreibt Infrastruktur- und Identitäts-Filter) |
+| Nur Bereiche | Bereichsname oder Namensbestandteil, eine je Zeile | nur Geräte in diesen Bereichen (leer = alle) |
+| Typ-Labels | `domain: Label`, eine je Zeile | überschreibt/ergänzt die eingebaute Typ-Zuordnung (z. B. `light: Lampe`) |
 
 ## Befehl / Service
 
@@ -61,8 +77,10 @@ eine Notiz pro Gerät, passend zum bestehenden Inventar-System der Obsidian-Vaul
 
 Rückgabe: Liste der erzeugten (`created`), aktualisierten (`updated`),
 umbenannten (`renamed`), übersprungenen Dateien (`skipped_infra`,
-`skipped_ignored`, `skipped_unidentified`) sowie Fehler (`errors`) und
-verwaiste Notizen (`orphaned`).
+`skipped_ignored`, `skipped_unidentified`, `skipped_area`) sowie Fehler
+(`errors`), verwaiste Notizen (`orphaned`) und die Änderungen seit dem
+letzten Lauf (`changed_created`, `changed_updated`, `changed_renamed`,
+`changed_removed`).
 
 ## Protokoll-Zuordnung
 

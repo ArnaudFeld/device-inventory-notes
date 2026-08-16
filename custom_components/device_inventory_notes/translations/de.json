@@ -39,7 +39,9 @@
           "merge_mode": "Merge-Modus",
           "auto_update": "Automatisch aktualisieren, wenn sich Geräte/Entitäten ändern",
           "ignored_devices": "Ignorierte Geräte (Geräte-ID oder Namensbestandteil, eine je Zeile)",
-          "force_include": "Trotzdem erstellen – z. B. Bridges/Koordinatoren (Geräte-ID oder Namensbestandteil, eine je Zeile)"
+          "force_include": "Trotzdem erstellen – z. B. Bridges/Koordinatoren (Geräte-ID oder Namensbestandteil, eine je Zeile)",
+          "only_areas": "Nur Bereiche (Bereichsname oder Namensbestandteil, eine je Zeile; leer = alle)",
+          "type_map": "Typ-Labels überschreiben (Format: domain: Label, eine je Zeile; z. B. light: Lampe)"
         }
       }
     },
@@ -112,7 +114,9 @@
           "merge_mode": "Merge-Modus",
           "auto_update": "Automatisch aktualisieren, wenn sich Geräte/Entitäten ändern",
           "ignored_devices": "Ignorierte Geräte (Geräte-ID oder Namensbestandteil, eine je Zeile)",
-          "force_include": "Trotzdem erstellen – z. B. Bridges/Koordinatoren (Geräte-ID oder Namensbestandteil, eine je Zeile)"
+          "force_include": "Trotzdem erstellen – z. B. Bridges/Koordinatoren (Geräte-ID oder Namensbestandteil, eine je Zeile)",
+          "only_areas": "Nur Bereiche (Bereichsname oder Namensbestandteil, eine je Zeile; leer = alle)",
+          "type_map": "Typ-Labels überschreiben (Format: domain: Label, eine je Zeile; z. B. light: Lampe)"
         }
       }
     },
