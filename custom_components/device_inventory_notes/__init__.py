@@ -199,7 +199,32 @@ async def async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
     Home Assistant calls this after an options-flow change instead of
     reloading the entry, so the new fields/order take effect immediately
-    without a restart.
+    without a restart. A notification reminds the user to run the scan
+    service, since options changes do not trigger a regeneration.
     """
     runtime: DeviceInventoryRuntime = hass.data[DOMAIN][entry.entry_id]
     runtime.reload_options()
+    service_name = f"{DOMAIN}.{SERVICE_SCAN}"
+    if hass.config.language == "de":
+        message = (
+            "Die Einstellungen wurden gespeichert. Bitte führe jetzt den Dienst "
+            f'<a href="/config/tools/action?service={service_name}">'
+            f"device_inventory_notes.scan_and_generate</a> aus, "
+            "damit die Notizen mit den neuen Einstellungen aktualisiert werden."
+        )
+    else:
+        message = (
+            "The settings were saved. Please run the service "
+            f'<a href="/config/tools/action?service={service_name}">'
+            f"device_inventory_notes.scan_and_generate</a> now, "
+            "so the notes are regenerated with the new settings."
+        )
+    await hass.services.async_call(
+        "persistent_notification",
+        "create",
+        {
+            "notification_id": f"{DOMAIN}_options_changed",
+            "title": "Device Inventory Notes",
+            "message": message,
+        },
+    )
