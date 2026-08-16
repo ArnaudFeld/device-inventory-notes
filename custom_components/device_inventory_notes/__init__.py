@@ -50,14 +50,26 @@ class DeviceInventoryRuntime:
         self._debounce: asyncio.TimerHandle | None = None
         self._remove_listeners: list[Callable[[], None]] = []
 
+    def _current_entry(self) -> ConfigEntry:
+        """Return the fresh entry so options changes are always picked up."""
+        return self.hass.config_entries.async_get_entry(self.entry.entry_id) or self.entry
+
+    def _current_options(self) -> dict:
+        entry = self._current_entry()
+        return {**entry.data, **entry.options}
+
+    def reload_options(self) -> None:
+        """Rebuild the generator from the current entry options."""
+        self.generator = DeviceNoteGenerator(self.hass, self._current_options())
+
     @property
     def auto_update(self) -> bool:
-        options = {**self.entry.data, **self.entry.options}
-        return bool(options.get(CONF_AUTO_UPDATE, True))
+        return bool(self._current_options().get(CONF_AUTO_UPDATE, True))
 
     async def run(self, dry_run: bool = False) -> dict[str, Any]:
         async with self._lock:
             try:
+                self.reload_options()
                 report: GenerateReport = await self.generator.generate(dry_run=dry_run)
             except Exception:
                 _LOGGER.exception("Fehler beim Generieren der Geräte-Notizen")
@@ -180,3 +192,14 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     runtime.shutdown()
     hass.services.async_remove(DOMAIN, SERVICE_SCAN)
     return True
+
+
+async def async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Rebuild the generator with the new options.
+
+    Home Assistant calls this after an options-flow change instead of
+    reloading the entry, so the new fields/order take effect immediately
+    without a restart.
+    """
+    runtime: DeviceInventoryRuntime = hass.data[DOMAIN][entry.entry_id]
+    runtime.reload_options()

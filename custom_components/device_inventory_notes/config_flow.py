@@ -23,21 +23,23 @@ from .const import (
     CONF_IGNORED_DEVICES,
     CONF_LAYOUT,
     CONF_MERGE_MODE,
+    CONF_OBSIDIAN_BASE,
     DEFAULT_AUTO_UPDATE,
     DEFAULT_EXPORT_DIR,
     DEFAULT_FIELDS,
     DEFAULT_LAYOUT,
     DEFAULT_MERGE_MODE,
+    DEFAULT_OBSIDIAN_BASE,
     DOMAIN,
     EXTRA_PROTOCOL_OPTIONS,
     FIELD_LABEL_TO_KEY,
     FIELD_ORDER,
-    INDEX_FILENAME,
     KEY_TO_LABEL,
     LAYOUT_AREA,
     LAYOUT_PROTOCOL,
     MERGE_MODE_CREATE_ONLY,
     MERGE_MODE_MERGE,
+    OVERVIEW_ROOT_FILENAME,
     PROTOCOL_MAP,
     PROTOCOL_UNKNOWN,
     SELECTABLE_FIELDS,
@@ -51,7 +53,7 @@ def _placeholder_links(language: str) -> dict[str, str]:
     zip_label = "ZIP-Datei" if language == "de" else "ZIP file"
     return {
         "notes_link": (
-            f'<a href="/local/device_inventory_notes/{quote(INDEX_FILENAME)}" '
+            f'<a href="/local/device_inventory_notes/{quote(OVERVIEW_ROOT_FILENAME)}" '
             f'target="_blank">{note_label}</a>'
         ),
         "zip_link": (
@@ -242,6 +244,10 @@ def _schema_settings(current: dict) -> vol.Schema:
         {
             vol.Required(
                 CONF_EXPORT_DIR, default=current.get(CONF_EXPORT_DIR, DEFAULT_EXPORT_DIR)
+            ): selector.TextSelector(),
+            vol.Required(
+                CONF_OBSIDIAN_BASE,
+                default=current.get(CONF_OBSIDIAN_BASE, DEFAULT_OBSIDIAN_BASE),
             ): selector.TextSelector(),
             vol.Required(
                 CONF_MERGE_MODE, default=current.get(CONF_MERGE_MODE, DEFAULT_MERGE_MODE)

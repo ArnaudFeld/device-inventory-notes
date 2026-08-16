@@ -16,6 +16,7 @@ CONF_IGNORED_DEVICES: Final = "ignored_devices"
 CONF_FORCE_INCLUDE: Final = "force_include"
 CONF_FIELDS: Final = "fields"
 CONF_FIELD_ORDER: Final = "field_order"
+CONF_OBSIDIAN_BASE: Final = "obsidian_base"
 
 LAYOUT_PROTOCOL: Final = "protocol"
 LAYOUT_AREA: Final = "area"
@@ -27,6 +28,9 @@ DEFAULT_EXPORT_DIR: Final = "device_inventory_notes"
 DEFAULT_LAYOUT: Final = LAYOUT_PROTOCOL
 DEFAULT_MERGE_MODE: Final = MERGE_MODE_MERGE
 DEFAULT_AUTO_UPDATE: Final = True
+# Obsidian vault path under which the protocol folders live; the dataview
+# queries in the generated overview pages use it as their FROM target.
+DEFAULT_OBSIDIAN_BASE: Final = "02 Home Assistant/Aktoren"
 
 # Fields that HA can fill. Everything else in a note file is a "hand field"
 # (lagerort, menge, kaufdatum, ...) and must NEVER be overwritten.
@@ -69,6 +73,7 @@ HAND_FIELDS: Final = frozenset(
         "gekauft_bei",
         "garantie_bis",
         "notiz",
+        "transport",
     }
 )
 
@@ -99,6 +104,7 @@ FIELD_LABEL_TO_KEY: Final[dict[str, str]] = {
     "Gekauft Bei": "gekauft_bei",
     "Garantie Bis": "garantie_bis",
     "Notiz": "notiz",
+    "Transport": "transport",
 }
 
 # Inverse mapping (internal key -> display label) for pre-filling the order step.
@@ -124,6 +130,7 @@ FIELD_ORDER: Final = (
     "hersteller",
     "modell",
     "protokoll",
+    "transport",
     "friendly_name",
     "name",
     "ieee_address",
@@ -147,7 +154,31 @@ FIELD_ORDER: Final = (
     "notiz",
 )
 
-INDEX_FILENAME: Final = "00 - Geräte-Übersicht.md"
+# Dataview overview pages generated into the export root and each protocol
+# folder. Filenames are aligned with the Obsidian vault naming convention.
+OVERVIEW_ROOT_FILENAME: Final = "01-Übersicht Aktoren.md"
+OVERVIEW_FILENAME_TEMPLATE: Final = "01-Übersicht {proto}.md"
+LEGACY_INDEX_FILENAME: Final = "00 - Geräte-Übersicht.md"
+
+# Protocols that get an overview page, always (also for empty folders).
+OVERVIEW_PROTOCOLS: Final = (
+    "Bluetooth",
+    "DECT",
+    "HomematicIP",
+    "Matter",
+    "WiFi",
+    "Zigbee",
+)
+
+# Emoji per protocol used for the Kategorien links in the root overview.
+OVERVIEW_EMOJIS: Final[dict[str, str]] = {
+    "Bluetooth": "🦷",
+    "DECT": "☎️",
+    "HomematicIP": "🏠",
+    "Matter": "🔮",
+    "WiFi": "📶",
+    "Zigbee": "🐝",
+}
 
 # integration domain -> protokoll value used in notes
 PROTOCOL_MAP: Final[dict[str, str]] = {

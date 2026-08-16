@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import datetime
 import re
 import shutil
 import zipfile
@@ -27,16 +26,22 @@ from .const import (
     CONF_IGNORED_DEVICES,
     CONF_LAYOUT,
     CONF_MERGE_MODE,
+    CONF_OBSIDIAN_BASE,
     DEFAULT_EXPORT_DIR,
     DEFAULT_FIELDS,
+    DEFAULT_OBSIDIAN_BASE,
     FIELD_LABEL_TO_KEY,
     FIELD_ORDER,
     GENERATED_ON_CREATE_FIELDS,
     HA_FIELDS,
     HAND_FIELDS,
-    INDEX_FILENAME,
     LAYOUT_AREA,
+    LEGACY_INDEX_FILENAME,
     MERGE_MODE_CREATE_ONLY,
+    OVERVIEW_EMOJIS,
+    OVERVIEW_FILENAME_TEMPLATE,
+    OVERVIEW_PROTOCOLS,
+    OVERVIEW_ROOT_FILENAME,
     PROTOCOL_MAP,
     SERVICE_DOMAINS,
     TYPE_MAP,
@@ -54,7 +59,15 @@ _FRITZ_DECT_MODEL_MARKERS = ("dect", "fon")
 
 # Fields that used to be HA-managed but no longer exist. Existing notes get
 # these removed on the next update.
-RETIRED_HA_FIELDS: frozenset[str] = frozenset({"transport"})
+RETIRED_HA_FIELDS: frozenset[str] = frozenset()
+
+# Matter integration unique_id markers for the transport diagnostics entities.
+# These entities are disabled by the integration but live in the entity
+# registry, so their unique_id reveals the node's transport.
+_MATTER_TRANSPORT_MARKERS: tuple[tuple[str, str], ...] = (
+    ("ThreadDiagnostics", "Thread"),
+    ("WiFiDiagnostics", "WiFi"),
+)
 
 
 def device_display_name(device) -> str:
@@ -70,6 +83,16 @@ def safe_filename(name: str) -> str:
     cleaned = _CONTROL_CHARS.sub(" ", name)
     cleaned = _FILENAME_UNSAFE.sub("-", cleaned).strip(" .")
     return cleaned or "Gerät"
+
+
+def _is_generated_overview(path: Path) -> bool:
+    """True for the auto-generated dataview overview pages and the legacy index."""
+    name = path.name
+    if name == LEGACY_INDEX_FILENAME or name == OVERVIEW_ROOT_FILENAME:
+        return True
+    return name in {
+        OVERVIEW_FILENAME_TEMPLATE.format(proto=proto) for proto in OVERVIEW_PROTOCOLS
+    }
 
 
 def _filter_values(raw: str) -> list[str]:
@@ -209,6 +232,7 @@ class DeviceNoteGenerator:
         self.hass = hass
         self.options = options
         self.export_dir = options.get(CONF_EXPORT_DIR) or DEFAULT_EXPORT_DIR
+        self.obsidian_base = options.get(CONF_OBSIDIAN_BASE) or DEFAULT_OBSIDIAN_BASE
         self.layout = options.get(CONF_LAYOUT)
         self.merge_mode = options.get(CONF_MERGE_MODE)
         self.ignored = options.get(CONF_IGNORED_DEVICES, "")
@@ -278,10 +302,11 @@ class DeviceNoteGenerator:
             if entity.device_id:
                 domains_by_device.setdefault(entity.device_id, set()).add(entity.domain)
 
+        transport_by_device = self._detect_transport(ereg)
+
         devices = sorted(dreg.devices.values(), key=lambda item: item.id)
         known_device_ids = {dev.id for dev in devices}
         known_ieees: set[str] = set()
-        index_entries: list[tuple[str, str, str]] = []
 
         report.total_scanned = len(devices)
         for dev in devices:
@@ -338,14 +363,13 @@ class DeviceNoteGenerator:
                     floors,
                     entry_title,
                     dreg,
+                    transport_by_device,
                     dry_run,
                 )
             except OSError as exc:
                 report.errors.append(f"{name}: {exc}")
                 continue
 
-            if action in {"created", "updated", "renamed", "existing"}:
-                index_entries.append((name, protocol, area_by_id.get(dev.area_id) or ""))
             if action == "created":
                 report.created.append(str(path))
             elif action == "updated":
@@ -368,7 +392,7 @@ class DeviceNoteGenerator:
                 known_ieees,
             )
         if not dry_run:
-            index_path = await asyncio.to_thread(self._write_index, root, index_entries)
+            index_path = await asyncio.to_thread(self._write_overviews, root)
             report.index_file = str(index_path)
             report.download_zip, report.download_dir = await asyncio.to_thread(
                 self._mirror_to_www, root
@@ -411,6 +435,28 @@ class DeviceNoteGenerator:
         return None, None
 
     @staticmethod
+    def _detect_transport(ereg) -> dict[str, str]:
+        """Map device_id -> runtime transport for Matter devices.
+
+        The Matter integration registers diagnostics entities (disabled by the
+        integration, so absent from the state machine) whose unique_id contains
+        a transport marker (e.g. "ThreadDiagnosticsChannel-53-0" for Thread,
+        "WiFiDiagnosticsRssi-54-4" for WiFi). Bluetooth only appears during
+        commissioning and is never a runtime transport, so it stays empty.
+        """
+        transport_by_device: dict[str, str] = {}
+        for entity in ereg.entities.values():
+            if entity.platform != "matter" or not entity.unique_id:
+                continue
+            if not entity.device_id:
+                continue
+            for marker, transport in _MATTER_TRANSPORT_MARKERS:
+                if marker in entity.unique_id:
+                    transport_by_device.setdefault(entity.device_id, transport)
+                    break
+        return transport_by_device
+
+    @staticmethod
     def _infer_type(domains: set[str]) -> str | None:
         if not domains:
             return None
@@ -439,7 +485,7 @@ class DeviceNoteGenerator:
         if not root.is_dir():
             return None
         for path in sorted(root.glob("**/*.md")):
-            if path.name == INDEX_FILENAME:
+            if _is_generated_overview(path):
                 continue
             try:
                 text = path.read_text(encoding="utf-8", errors="replace")
@@ -530,6 +576,7 @@ class DeviceNoteGenerator:
         floors: dict[str, str],
         entry_title: dict[str, str],
         dreg,
+        transport_by_device: dict[str, str],
         dry_run: bool,
     ) -> tuple[str, Path, Path | None]:
         folder = root / safe_filename(self._folder_name(dev, protocol, area_by_id))
@@ -568,6 +615,12 @@ class DeviceNoteGenerator:
                     final[key] = computed[key]
                 elif key in HAND_FIELDS and key in self.fields:
                     final[key] = ""
+            if (
+                protocol == "Matter"
+                and "transport" in self.fields
+                and transport_by_device.get(dev.id)
+            ):
+                final["transport"] = transport_by_device[dev.id]
             action = "created"
         else:
             if self.merge_mode == MERGE_MODE_CREATE_ONLY:
@@ -595,6 +648,13 @@ class DeviceNoteGenerator:
                     and computed.get(key)
                 ):
                     final[key] = computed[key]
+            if (
+                protocol == "Matter"
+                and "transport" in self.fields
+                and transport_by_device.get(dev.id)
+                and not final.get("transport")
+            ):
+                final["transport"] = transport_by_device[dev.id]
             if computed.get("name"):
                 final["name"] = computed["name"]
             action = "updated"
@@ -615,31 +675,94 @@ class DeviceNoteGenerator:
         target.write_text(content, encoding="utf-8")
         return action, target, existing_path
 
-    def _write_index(self, root: Path, entries: list[tuple[str, str, str]]) -> Path:
-        """Write the map-of-content note grouped by protocol."""
-        by_proto: dict[str, list[tuple[str, str]]] = {}
-        for name, protocol, area in entries:
-            by_proto.setdefault(protocol, []).append((name, area))
+    def _write_overviews(self, root: Path) -> Path:
+        """Write the dataview overview pages (root + one per protocol).
 
-        lines = [
+        The root page aggregates all notes by typ and links each protocol
+        overview via a fixed emoji. Each protocol page lists its notes as a
+        dataview table. All pages are written even when a protocol folder is
+        empty, so the Kategorien links always resolve.
+        """
+        protocol_filenames = {
+            proto: OVERVIEW_FILENAME_TEMPLATE.format(proto=proto)
+            for proto in OVERVIEW_PROTOCOLS
+        }
+
+        kategorien = [
+            f"- [[{protocol_filenames[proto][:-3]}|{OVERVIEW_EMOJIS.get(proto, '')} {proto}]]"
+            for proto in OVERVIEW_PROTOCOLS
+        ]
+        root_lines = [
             "---",
-            'typ: "Übersicht"',
-            f'update: "{datetime.date.today().isoformat()}"',
+            "aliases: []",
             "---",
             "",
-            "# Geräte-Übersicht",
+            "# ⚡ Aktoren",
+            "",
+            "```dataview",
+            "TABLE WITHOUT ID",
+            '  typ AS "🔧 Typ",',
+            '  length(rows) AS "🔢 Anzahl"',
+            f'FROM "{self.obsidian_base}"',
+            "WHERE file.path != this.file.path ",
+            '  AND !startswith(file.name, "01-Übersicht")',
+            "GROUP BY typ",
+            "SORT typ ASC",
+            "```",
+            "",
+            "## Kategorien",
+            *kategorien,
             "",
         ]
-        for protocol in sorted(by_proto):
-            lines.append(f"## {protocol}")
-            for name, area in sorted(by_proto[protocol]):
-                suffix = f" ({area})" if area else ""
-                lines.append(f"- [[{safe_filename(name)}]]{suffix}")
-            lines.append("")
+        root_target = root / OVERVIEW_ROOT_FILENAME
+        root_target.write_text("\n".join(root_lines), encoding="utf-8")
 
-        target = root / INDEX_FILENAME
-        target.write_text("\n".join(lines), encoding="utf-8")
-        return target
+        for proto in OVERVIEW_PROTOCOLS:
+            proto_folder = root / proto
+            proto_folder.mkdir(parents=True, exist_ok=True)
+            columns = [
+                '  file.link AS "Aktor",',
+                '  typ AS "🔧 Typ",',
+                '  hersteller AS "🏷️ Hersteller",',
+                '  modell AS "📦 Modell",',
+            ]
+            if proto == "Matter":
+                columns.append('  transport AS "🌐 Transport",')
+            columns.extend(
+                [
+                    '  lagerort AS "📍 Lagerort",',
+                    '  menge AS "🔢 Menge"',
+                ]
+            )
+            proto_lines = [
+                "---",
+                "aliases: []",
+                "---",
+                "",
+                f"# ⚡ {proto}-Aktoren",
+                "",
+                "```dataview",
+                "TABLE WITHOUT ID",
+                *columns,
+                f'FROM "{self.obsidian_base}/{proto}"',
+                "WHERE file.path != this.file.path",
+                "SORT typ ASC, hersteller ASC",
+                "```",
+                "",
+            ]
+            proto_target = proto_folder / protocol_filenames[proto]
+            proto_target.write_text("\n".join(proto_lines), encoding="utf-8")
+
+        # Drop the legacy static index note if it still exists.
+        legacy = root / LEGACY_INDEX_FILENAME
+        if legacy.exists():
+            try:
+                legacy.unlink()
+            except OSError:
+                # Not fatal; it is just skipped in mirror/orphan scans.
+                pass
+
+        return root_target
 
     def _find_orphans(
         self, root: Path, known_device_ids: set[str], known_ieees: set[str]
@@ -649,7 +772,7 @@ class DeviceNoteGenerator:
             return []
         orphans: list[str] = []
         for path in sorted(root.glob("**/*.md")):
-            if path.name == INDEX_FILENAME:
+            if _is_generated_overview(path):
                 continue
             try:
                 text = path.read_text(encoding="utf-8", errors="replace")
@@ -700,7 +823,7 @@ class DeviceNoteGenerator:
         www_dir.mkdir(parents=True, exist_ok=True)
 
         for path in sorted(root.rglob("*.md")):
-            if path.parent == root and path.name != INDEX_FILENAME:
+            if path.name == LEGACY_INDEX_FILENAME:
                 continue
             rel = path.relative_to(root)
             dest = www_dir / rel

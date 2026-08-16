@@ -10,7 +10,7 @@
       },
       "fields": {
         "title": "Select fields",
-        "description": "Choose which fields appear in the notes. Hand-maintained fields (lagerort, menge, kaufdatum, preis, gekauft_bei, garantie_bis, notiz) are created as empty placeholders and never overwritten on updates.",
+        "description": "Choose which fields appear in the notes. Hand-maintained fields (lagerort, menge, kaufdatum, preis, gekauft_bei, garantie_bis, notiz, transport) are created as empty placeholders and never overwritten on updates.",
         "data": {
           "fields": "Fields included in the notes"
         }
@@ -35,6 +35,7 @@
         "title": "Further settings",
         "data": {
           "export_dir": "Export directory (relative to the Home Assistant config dir or absolute)",
+          "obsidian_base": "Obsidian base path of the protocol folders (used by the dataview overviews)",
           "merge_mode": "Merge mode",
           "auto_update": "Update automatically when devices/entities change",
           "ignored_devices": "Ignored devices (device ID or name fragment, one per line)",
@@ -76,12 +77,13 @@
           "preis": "Price",
           "gekauft_bei": "Purchased At",
           "garantie_bis": "Warranty Until",
-          "notiz": "Note"
+          "notiz": "Note",
+          "transport": "Transport"
         }
       },
       "fields": {
         "title": "Select fields",
-        "description": "Choose which fields appear in the notes. Hand-maintained fields (lagerort, menge, kaufdatum, preis, gekauft_bei, garantie_bis, notiz) are created as empty placeholders and never overwritten on updates.",
+        "description": "Choose which fields appear in the notes. Hand-maintained fields (lagerort, menge, kaufdatum, preis, gekauft_bei, garantie_bis, notiz, transport) are created as empty placeholders and never overwritten on updates.",
         "data": {
           "fields": "Fields included in the notes"
         }
@@ -106,6 +108,7 @@
         "title": "Further settings",
         "data": {
           "export_dir": "Export directory (relative to the Home Assistant config dir or absolute)",
+          "obsidian_base": "Obsidian base path of the protocol folders (used by the dataview overviews)",
           "merge_mode": "Merge mode",
           "auto_update": "Update automatically when devices/entities change",
           "ignored_devices": "Ignored devices (device ID or name fragment, one per line)",
