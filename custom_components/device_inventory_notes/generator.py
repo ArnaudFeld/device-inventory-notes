@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import re
 import shutil
 import zipfile
@@ -54,6 +55,8 @@ from .const import (
     SERVICE_DOMAINS,
     TYPE_MAP,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 _FILENAME_UNSAFE = re.compile(r'[\\/:*?"<>|#%{}]+')
 _CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]+")
@@ -352,6 +355,18 @@ class DeviceNoteGenerator:
 
         transport_by_device = self._detect_transport(ereg)
 
+        # Single full-tree read per run: identity index backing stale-note
+        # and orphan lookups, so those no longer scan the tree per device.
+        note_index = await asyncio.to_thread(self._index_note_ids, root)
+        by_device_id: dict[str, Path] = {}
+        by_ieee: dict[str, Path] = {}
+        for rel, info in note_index.items():
+            note_path = root / rel
+            if info["device_id"]:
+                by_device_id.setdefault(info["device_id"], note_path)
+            if info["ieee"]:
+                by_ieee.setdefault(info["ieee"], note_path)
+
         devices = sorted(dreg.devices, key=lambda item: item.id)
         known_device_ids = {dev.id for dev in devices}
         if device_id:
@@ -393,7 +408,7 @@ class DeviceNoteGenerator:
             protocol, ieee = self._resolve_protocol(dev, entry_domain, self.extra_map)
             if protocol is None:
                 report.no_protocol_count += 1
-                stale = await asyncio.to_thread(self._find_by_identifier, root, dev.id, None)
+                stale = by_device_id.get(dev.id)
                 if stale is not None and not dry_run:
                     try:
                         stale.unlink()
@@ -420,6 +435,8 @@ class DeviceNoteGenerator:
                     entry_title,
                     dreg,
                     transport_by_device,
+                    by_device_id,
+                    by_ieee,
                     dry_run,
                 )
             except OSError as exc:
@@ -439,14 +456,18 @@ class DeviceNoteGenerator:
         # device in the loop, every other note would look orphaned.
         if device_id is None:
             if dry_run:
-                report.orphaned = await asyncio.to_thread(
-                    self._find_orphans, root, known_device_ids, known_ieees
-                )
+                report.orphaned = [
+                    str(root / rel)
+                    for rel in self._orphan_paths(
+                        note_index, known_device_ids, known_ieees
+                    )
+                ]
             else:
                 report.orphaned = await asyncio.to_thread(
                     self._delete_orphans,
                     root,
                     report,
+                    note_index,
                     known_device_ids,
                     known_ieees,
                 )
@@ -455,7 +476,7 @@ class DeviceNoteGenerator:
             report.index_file = str(index_path)
             await asyncio.to_thread(self._write_changelog, root, report)
             report.download_zip, report.download_dir = await asyncio.to_thread(
-                self._mirror_to_www, root
+                self._mirror_to_www, root, report
             )
 
         return report
@@ -569,10 +590,11 @@ class DeviceNoteGenerator:
         report.changed_updated = updated
         report.changed_renamed = renamed
         report.changed_removed = removed
-        self._save_last_state(root, new_state)
 
         if not (created or updated or renamed or removed):
+            # Snapshot already matches the tree; no need to rewrite it.
             return
+        self._save_last_state(root, new_state)
 
         changelog_path = root / CHANGELOG_FILENAME
         old_sections: list[str] = []
@@ -701,16 +723,17 @@ class DeviceNoteGenerator:
             return area_by_id.get(dev.area_id) or "Ohne Bereich"
         return protocol
 
-    def _find_by_identifier(
-        self, root: Path, device_id: str, ieee: str | None
-    ) -> Path | None:
-        """Locate an existing note anywhere in the export tree by id/ieee.
+    def _index_note_ids(self, root: Path) -> dict[str, dict]:
+        """relpath -> {device_id, ieee} for every note in the export tree.
 
-        Searches the whole tree so notes survive a layout switch
-        (protocol folders <-> area folders).
+        Single full-tree read per run backing stale-note and orphan lookups.
+        Overviews carry no device identity and are excluded; notes survive a
+        layout switch (protocol folders <-> area folders) since matching is
+        by identity, not by path.
         """
+        notes: dict[str, dict] = {}
         if not root.is_dir():
-            return None
+            return notes
         for path in sorted(root.glob("**/*.md")):
             if _is_generated_overview(path):
                 continue
@@ -722,11 +745,31 @@ class DeviceNoteGenerator:
             if not parsed:
                 continue
             fields, _body = parsed
-            if fields.get("ha_device_id") == device_id:
-                return path
-            if ieee and fields.get("ieee_address") == ieee:
-                return path
-        return None
+            notes[str(path.relative_to(root))] = {
+                "device_id": fields.get("ha_device_id", ""),
+                "ieee": fields.get("ieee_address", ""),
+            }
+        return notes
+
+    @staticmethod
+    def _orphan_paths(
+        notes: dict[str, dict], known_device_ids: set[str], known_ieees: set[str]
+    ) -> list[str]:
+        """Relpaths whose registry id/ieee matches no known device. Pure filter."""
+        orphans: list[str] = []
+        for rel, info in notes.items():
+            device_id = info.get("device_id")
+            ieee = info.get("ieee")
+            if device_id:
+                if device_id in known_device_ids:
+                    continue
+            elif ieee:
+                if ieee in known_ieees:
+                    continue
+            else:
+                continue
+            orphans.append(rel)
+        return orphans
 
     def _computed_fields(
         self,
@@ -804,6 +847,8 @@ class DeviceNoteGenerator:
         entry_title: dict[str, str],
         dreg,
         transport_by_device: dict[str, str],
+        by_device_id: dict[str, Path],
+        by_ieee: dict[str, Path],
         dry_run: bool,
     ) -> tuple[str, Path, Path | None]:
         folder = root / safe_filename(self._folder_name(dev, protocol, area_by_id))
@@ -828,7 +873,9 @@ class DeviceNoteGenerator:
                 return "error", target, None
             existing_path = target
         else:
-            existing_path = self._find_by_identifier(root, dev.id, ieee)
+            existing_path = by_device_id.get(dev.id)
+            if existing_path is None and ieee:
+                existing_path = by_ieee.get(ieee)
 
         existing_body = ""
         computed = self._computed_fields(
@@ -991,60 +1038,65 @@ class DeviceNoteGenerator:
 
         return root_target
 
-    def _find_orphans(
-        self, root: Path, known_device_ids: set[str], known_ieees: set[str]
-    ) -> list[str]:
-        """Notes whose registry id/ieee matches no known device. Read-only."""
-        if not root.is_dir():
-            return []
-        orphans: list[str] = []
-        for path in sorted(root.glob("**/*.md")):
-            if _is_generated_overview(path):
-                continue
-            try:
-                text = path.read_text(encoding="utf-8", errors="replace")
-            except OSError:
-                continue
-            parsed = parse_note(text)
-            if not parsed:
-                continue
-            fields, _body = parsed
-            device_id = fields.get("ha_device_id")
-            ieee = fields.get("ieee_address")
-            if device_id:
-                if device_id in known_device_ids:
-                    continue
-            elif ieee:
-                if ieee in known_ieees:
-                    continue
-            else:
-                continue
-            orphans.append(str(path))
-        return orphans
-
     def _delete_orphans(
-        self, root: Path, report: GenerateReport, known_device_ids: set[str], known_ieees: set[str]
+        self,
+        root: Path,
+        report: GenerateReport,
+        notes: dict[str, dict],
+        known_device_ids: set[str],
+        known_ieees: set[str],
     ) -> list[str]:
         """Delete notes whose registry id/ieee matches no known device.
 
-        Called after the main loop (non dry-run only). Returns the list of
-        deleted paths and records them in report.removed_stale.
+        Called after the main loop (non dry-run only) with the pre-loop
+        identity index. Returns the list of deleted paths and records them
+        in report.removed_stale.
         """
-        orphans = self._find_orphans(root, known_device_ids, known_ieees)
         deleted: list[str] = []
-        for path_str in orphans:
-            path = Path(path_str)
+        for rel in self._orphan_paths(notes, known_device_ids, known_ieees):
+            path = root / rel
             try:
                 path.unlink()
-                deleted.append(path_str)
-                report.removed_stale.append(path_str)
+                deleted.append(str(path))
+                report.removed_stale.append(str(path))
             except OSError as exc:
                 report.errors.append(f"{path.name}: {exc}")
         return deleted
 
-    def _mirror_to_www(self, root: Path) -> tuple[str, str]:
-        """Mirror the note files into www/ and build a zip for download."""
+    @staticmethod
+    def _tree_changed(report: GenerateReport) -> bool:
+        """True when the export tree changed during this run.
+
+        Note: report.updated lists every rewritten note (deterministic
+        regeneration), so only the snapshot diff (changed_*) plus structural
+        lists are a reliable change signal.
+        """
+        return bool(
+            report.created
+            or report.renamed
+            or report.removed_stale
+            or report.changed_created
+            or report.changed_updated
+            or report.changed_renamed
+            or report.changed_removed
+        )
+
+    def _mirror_to_www(self, root: Path, report: GenerateReport) -> tuple[str, str]:
+        """Mirror the note files into www/ and build a zip for download.
+
+        Skipped when the tree did not change since the last run (the mirror
+        already matches); always rebuilt when the mirror dir or zip is
+        missing.
+        """
         www_dir = Path(self.hass.config.config_dir) / "www" / "device_inventory_notes"
+        zip_path = Path(self.hass.config.config_dir) / "www" / "device_inventory_notes.zip"
+        if (
+            not self._tree_changed(report)
+            and www_dir.is_dir()
+            and zip_path.is_file()
+        ):
+            _LOGGER.info("Export unverändert, Mirror/ZIP übersprungen")
+            return "/local/device_inventory_notes.zip", "/local/device_inventory_notes/"
         if www_dir.exists():
             shutil.rmtree(www_dir)
         www_dir.mkdir(parents=True, exist_ok=True)
@@ -1057,7 +1109,6 @@ class DeviceNoteGenerator:
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(path, dest)
 
-        zip_path = Path(self.hass.config.config_dir) / "www" / "device_inventory_notes.zip"
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
             for path in sorted(root.rglob("*.md")):
                 zf.write(path, path.relative_to(root))

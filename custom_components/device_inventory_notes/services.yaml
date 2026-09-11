@@ -3,10 +3,15 @@ scan_and_generate:
   description: >
     Erzeugt oder aktualisiert die Markdown-Notizen für alle Geräte im Export-Verzeichnis.
     Handgepflegte Felder (lagerort, menge, kaufdatum, preis, gekauft_bei, garantie_bis,
-    notiz) werden dabei nie überschrieben.
+    notiz) werden dabei nie überschrieben. Mit Geräte-ID optional nur ein einzelnes Gerät.
   fields:
     dry_run:
       name: Trockenlauf
-      description: Nur analysieren und berichten, keine Dateien schreiben.
+      description: Nur analysieren und Bericht liefern, nichts schreiben.
       selector:
         boolean:
+    device_id:
+      name: Gerät
+      description: Nur dieses Gerät verarbeiten; leer = alle Geräte. Verwaiste Notizen werden in diesem Modus nicht gelöscht.
+      selector:
+        device:
