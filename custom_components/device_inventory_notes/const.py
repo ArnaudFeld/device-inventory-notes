@@ -19,6 +19,8 @@ CONF_FIELD_ORDER: Final = "field_order"
 CONF_OBSIDIAN_BASE: Final = "obsidian_base"
 CONF_ONLY_AREAS: Final = "only_areas"
 CONF_TYPE_MAP: Final = "type_map"
+CONF_SCHEDULE_ENABLED: Final = "schedule_enabled"
+CONF_SCHEDULE_TIME: Final = "schedule_time"
 
 LAYOUT_PROTOCOL: Final = "protocol"
 LAYOUT_AREA: Final = "area"
@@ -30,6 +32,8 @@ DEFAULT_EXPORT_DIR: Final = "device_inventory_notes"
 DEFAULT_LAYOUT: Final = LAYOUT_PROTOCOL
 DEFAULT_MERGE_MODE: Final = MERGE_MODE_MERGE
 DEFAULT_AUTO_UPDATE: Final = True
+DEFAULT_SCHEDULE_ENABLED: Final = False
+DEFAULT_SCHEDULE_TIME: Final = "03:00:00"
 # Obsidian vault path under which the protocol folders live; the dataview
 # queries in the generated overview pages use it as their FROM target.
 DEFAULT_OBSIDIAN_BASE: Final = "02 Home Assistant/Aktoren"

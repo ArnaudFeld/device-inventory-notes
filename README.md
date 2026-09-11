@@ -63,6 +63,7 @@ eine Notiz pro Gerät, passend zum bestehenden Inventar-System der Obsidian-Vaul
 | Ordnerstruktur | `Ordner pro Protokoll` / `Ordner pro Bereich` | Standard: nach Protokoll (Zigbee, WiFi, …) |
 | Merge-Modus | `Vorhandene aktualisieren` / `Nur neue Notizen` | Standard: aktualisieren |
 | Automatisch aktualisieren | an/aus | Standard: an |
+| Geplanter Tageslauf | an/aus + Uhrzeit | Standard: aus – Sicherheitsnetz (fängt verpasste Änderungen auf, auch bei ausgeschaltetem Auto-Update) |
 | Feldauswahl | mehrere Felder wählbar | Welche HA-Felder in Notizen geschrieben werden (`name` und `ha_device_id` sind immer dabei) |
 | Ignorierte Geräte | Geräte-ID oder Namensbestandteil, eine je Zeile | Geräte werden übersprungen |
 | Trotzdem erstellen | Geräte-ID oder Namensbestandteil, eine je Zeile | erzwingt Mitnahme (überschreibt Infrastruktur- und Identitäts-Filter) |
@@ -74,6 +75,10 @@ eine Notiz pro Gerät, passend zum bestehenden Inventar-System der Obsidian-Vaul
 `device_inventory_notes.scan_and_generate` – Felder:
 
 - `dry_run` (boolean, optional): nur analysieren und Bericht liefern, nichts schreiben.
+- `device_id` (string, optional): nur dieses Gerät verarbeiten (`ha_device_id` aus
+  der Notiz); leer = alle Geräte. Im Einzel-Modus werden keine verwaisten Notizen
+  gelöscht, CHANGELOG/Notification/Snapshot laufen normal. Kombinierbar mit
+  `dry_run` (Vorschau für eine Notiz).
 
 Rückgabe: Liste der erzeugten (`created`), aktualisierten (`updated`),
 umbenannten (`renamed`), übersprungenen Dateien (`skipped_infra`,

@@ -16,10 +16,15 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse, callback
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.event import async_track_time_change
 
 from .const import (
     CONF_AUTO_UPDATE,
+    CONF_SCHEDULE_ENABLED,
+    CONF_SCHEDULE_TIME,
     DEBOUNCE_SECONDS,
+    DEFAULT_SCHEDULE_ENABLED,
+    DEFAULT_SCHEDULE_TIME,
     DOMAIN,
     EVENT_AREA_REGISTRY_UPDATED,
     EVENT_DEVICE_REGISTRY_UPDATED,
@@ -34,7 +39,10 @@ _LOGGER = logging.getLogger(__name__)
 PLATFORMS: list[str] = []
 
 SCAN_SERVICE_SCHEMA = vol.Schema(
-    {vol.Optional("dry_run", default=False): cv.boolean}
+    {
+        vol.Optional("dry_run", default=False): cv.boolean,
+        vol.Optional("device_id", default=None): vol.Any(None, cv.string),
+    }
 )
 
 
@@ -49,6 +57,7 @@ class DeviceInventoryRuntime:
         self._lock = asyncio.Lock()
         self._debounce: asyncio.TimerHandle | None = None
         self._remove_listeners: list[Callable[[], None]] = []
+        self._remove_schedule: Callable[[], None] | None = None
 
     def _current_entry(self) -> ConfigEntry:
         """Return the fresh entry so options changes are always picked up."""
@@ -66,11 +75,15 @@ class DeviceInventoryRuntime:
     def auto_update(self) -> bool:
         return bool(self._current_options().get(CONF_AUTO_UPDATE, True))
 
-    async def run(self, dry_run: bool = False) -> dict[str, Any]:
+    async def run(
+        self, dry_run: bool = False, device_id: str | None = None
+    ) -> dict[str, Any]:
         async with self._lock:
             try:
                 self.reload_options()
-                report: GenerateReport = await self.generator.generate(dry_run=dry_run)
+                report: GenerateReport = await self.generator.generate(
+                    dry_run=dry_run, device_id=device_id
+                )
             except Exception:
                 _LOGGER.exception("Fehler beim Generieren der Geräte-Notizen")
                 raise
@@ -212,6 +225,41 @@ class DeviceInventoryRuntime:
             _LOGGER.exception("Auto-Update fehlgeschlagen")
 
     @callback
+    def _on_scheduled_run(self, _now) -> None:
+        task = self.hass.async_create_task(self.run())
+        task.add_done_callback(self._on_run_done)
+
+    @callback
+    def setup_schedule(self) -> None:
+        """(Re-)install the daily scheduled run from the current options.
+
+        Independent of the registry-triggered auto-update: a safety net that
+        catches changes missed while HA was restarting (or when auto-update
+        is disabled). Called on setup and after every options change, since
+        options changes do not reload the entry.
+        """
+        if self._remove_schedule is not None:
+            self._remove_schedule()
+            self._remove_schedule = None
+        options = self._current_options()
+        if not options.get(CONF_SCHEDULE_ENABLED, DEFAULT_SCHEDULE_ENABLED):
+            return
+        raw = options.get(CONF_SCHEDULE_TIME) or DEFAULT_SCHEDULE_TIME
+        try:
+            hour_str, minute_str, *_ = str(raw).split(":")
+            hour, minute = int(hour_str), int(minute_str)
+        except ValueError:
+            _LOGGER.warning("Ungültige schedule_time %r, Zeitplan deaktiviert", raw)
+            return
+        if not 0 <= hour <= 23 or not 0 <= minute <= 59:
+            _LOGGER.warning("Ungültige schedule_time %r, Zeitplan deaktiviert", raw)
+            return
+        self._remove_schedule = async_track_time_change(
+            self.hass, self._on_scheduled_run, hour=hour, minute=minute, second=0
+        )
+        _LOGGER.info("Geplanter Tageslauf aktiv: %02d:%02d", hour, minute)
+
+    @callback
     def setup_listeners(self) -> None:
         self._remove_listeners.append(
             self.hass.bus.async_listen(EVENT_DEVICE_REGISTRY_UPDATED, self._on_registry_change)
@@ -227,6 +275,9 @@ class DeviceInventoryRuntime:
     def shutdown(self) -> None:
         if self._debounce is not None:
             self._debounce.cancel()
+        if self._remove_schedule is not None:
+            self._remove_schedule()
+            self._remove_schedule = None
         for remove in self._remove_listeners:
             remove()
         self._remove_listeners.clear()
@@ -238,7 +289,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = runtime
 
     async def _handle_scan(call: ServiceCall) -> dict[str, Any] | None:
-        report = await runtime.run(dry_run=bool(call.data.get("dry_run", False)))
+        report = await runtime.run(
+            dry_run=bool(call.data.get("dry_run", False)),
+            device_id=call.data.get("device_id") or None,
+        )
         if call.return_response:
             return report
         return None
@@ -251,6 +305,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         supports_response=SupportsResponse.OPTIONAL,
     )
     runtime.setup_listeners()
+    runtime.setup_schedule()
     if runtime.auto_update:
 
         async def _initial_run() -> None:
@@ -280,6 +335,7 @@ async def async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """
     runtime: DeviceInventoryRuntime = hass.data[DOMAIN][entry.entry_id]
     runtime.reload_options()
+    runtime.setup_schedule()
     service_name = f"{DOMAIN}.{SERVICE_SCAN}"
     if hass.config.language == "de":
         message = (

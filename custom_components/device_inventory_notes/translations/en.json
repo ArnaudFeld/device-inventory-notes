@@ -38,6 +38,8 @@
           "obsidian_base": "Obsidian base path of the protocol folders (used by the dataview overviews)",
           "merge_mode": "Merge mode",
           "auto_update": "Update automatically when devices/entities change",
+          "schedule_enabled": "Scheduled daily run (safety net, also when auto-update is off)",
+          "schedule_time": "Time of the scheduled daily run",
           "ignored_devices": "Ignored devices (device ID or name fragment, one per line)",
           "force_include": "Force include – e.g. bridges/coordinators (device ID or name fragment, one per line)",
           "only_areas": "Only areas (area name or name fragment, one per line; empty = all)",
@@ -113,6 +115,8 @@
           "obsidian_base": "Obsidian base path of the protocol folders (used by the dataview overviews)",
           "merge_mode": "Merge mode",
           "auto_update": "Update automatically when devices/entities change",
+          "schedule_enabled": "Scheduled daily run (safety net, also when auto-update is off)",
+          "schedule_time": "Time of the scheduled daily run",
           "ignored_devices": "Ignored devices (device ID or name fragment, one per line)",
           "force_include": "Force include – e.g. bridges/coordinators (device ID or name fragment, one per line)",
           "only_areas": "Only areas (area name or name fragment, one per line; empty = all)",
@@ -127,7 +131,17 @@
   "services": {
     "scan_and_generate": {
       "name": "Generate/update device notes",
-      "description": "Generates or updates the Markdown notes for all devices in the export directory. Hand-maintained fields (lagerort, menge, kaufdatum, preis, gekauft_bei, garantie_bis, notiz) are never overwritten."
+      "description": "Generates or updates the Markdown notes for all devices in the export directory. Hand-maintained fields (lagerort, menge, kaufdatum, preis, gekauft_bei, garantie_bis, notiz) are never overwritten. Optionally process only a single device via device_id.",
+      "fields": {
+        "dry_run": {
+          "name": "Dry run",
+          "description": "Only analyze and return a report, write nothing."
+        },
+        "device_id": {
+          "name": "Device ID",
+          "description": "Process only this device (ha_device_id from the note); empty = all devices. Orphaned notes are not deleted in this mode."
+        }
+      }
     }
   }
 }

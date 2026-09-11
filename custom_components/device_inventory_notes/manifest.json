@@ -1,7 +1,7 @@
 {
   "domain": "device_inventory_notes",
   "name": "Device Inventory Notes",
-  "version": "0.2.0",
+  "version": "0.3.1",
   "config_flow": true,
   "documentation": "https://github.com/arnaudfeld/device-inventory-notes",
   "issue_tracker": "https://github.com/arnaudfeld/device-inventory-notes/issues",

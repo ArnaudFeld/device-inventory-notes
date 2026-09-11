@@ -38,6 +38,8 @@
           "obsidian_base": "Obsidian-Basispfad der Protokoll-Ordner (für die Dataview-Übersichten)",
           "merge_mode": "Merge-Modus",
           "auto_update": "Automatisch aktualisieren, wenn sich Geräte/Entitäten ändern",
+          "schedule_enabled": "Geplanter Tageslauf (Sicherheitsnetz, auch bei ausgeschaltetem Auto-Update)",
+          "schedule_time": "Uhrzeit des geplanten Tageslaufs",
           "ignored_devices": "Ignorierte Geräte (Geräte-ID oder Namensbestandteil, eine je Zeile)",
           "force_include": "Trotzdem erstellen – z. B. Bridges/Koordinatoren (Geräte-ID oder Namensbestandteil, eine je Zeile)",
           "only_areas": "Nur Bereiche (Bereichsname oder Namensbestandteil, eine je Zeile; leer = alle)",
@@ -113,6 +115,8 @@
           "obsidian_base": "Obsidian-Basispfad der Protokoll-Ordner (für die Dataview-Übersichten)",
           "merge_mode": "Merge-Modus",
           "auto_update": "Automatisch aktualisieren, wenn sich Geräte/Entitäten ändern",
+          "schedule_enabled": "Geplanter Tageslauf (Sicherheitsnetz, auch bei ausgeschaltetem Auto-Update)",
+          "schedule_time": "Uhrzeit des geplanten Tageslaufs",
           "ignored_devices": "Ignorierte Geräte (Geräte-ID oder Namensbestandteil, eine je Zeile)",
           "force_include": "Trotzdem erstellen – z. B. Bridges/Koordinatoren (Geräte-ID oder Namensbestandteil, eine je Zeile)",
           "only_areas": "Nur Bereiche (Bereichsname oder Namensbestandteil, eine je Zeile; leer = alle)",
@@ -127,7 +131,17 @@
   "services": {
     "scan_and_generate": {
       "name": "Geräte-Notizen erzeugen/aktualisieren",
-      "description": "Erzeugt oder aktualisiert die Markdown-Notizen für alle Geräte im Export-Verzeichnis. Handgepflegte Felder (lagerort, menge, kaufdatum, preis, gekauft_bei, garantie_bis, notiz) werden nie überschrieben."
+      "description": "Erzeugt oder aktualisiert die Markdown-Notizen für alle Geräte im Export-Verzeichnis. Handgepflegte Felder (lagerort, menge, kaufdatum, preis, gekauft_bei, garantie_bis, notiz) werden nie überschrieben. Mit device_id optional nur ein einzelnes Gerät.",
+      "fields": {
+        "dry_run": {
+          "name": "Trockenlauf",
+          "description": "Nur analysieren und Bericht liefern, nichts schreiben."
+        },
+        "device_id": {
+          "name": "Geräte-ID",
+          "description": "Nur dieses Gerät verarbeiten (ha_device_id aus der Notiz); leer = alle Geräte. Verwaiste Notizen werden in diesem Modus nicht gelöscht."
+        }
+      }
     }
   }
 }

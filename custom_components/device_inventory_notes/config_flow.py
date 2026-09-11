@@ -25,8 +25,12 @@ from .const import (
     CONF_MERGE_MODE,
     CONF_OBSIDIAN_BASE,
     CONF_ONLY_AREAS,
+    CONF_SCHEDULE_ENABLED,
+    CONF_SCHEDULE_TIME,
     CONF_TYPE_MAP,
     DEFAULT_AUTO_UPDATE,
+    DEFAULT_SCHEDULE_ENABLED,
+    DEFAULT_SCHEDULE_TIME,
     DEFAULT_EXPORT_DIR,
     DEFAULT_FIELDS,
     DEFAULT_LAYOUT,
@@ -157,13 +161,13 @@ def _candidate_domains(hass) -> dict[str, int]:
     entry_domain = {e.entry_id: e.domain for e in hass.config_entries.async_entries()}
 
     children_by_parent: dict[str, list[str]] = {}
-    for dev in devreg.devices.values():
+    for dev in devreg.devices:
         if dev.via_device_id:
             children_by_parent.setdefault(dev.via_device_id, []).append(dev.id)
 
     known = set(PROTOCOL_MAP) | set(SERVICE_DOMAINS)
     counts: dict[str, int] = {}
-    for dev in devreg.devices.values():
+    for dev in devreg.devices:
         if dev.entry_type == dr.DeviceEntryType.SERVICE:
             continue
         if any(ident and ident[0] in SERVICE_DOMAINS for ident in dev.identifiers):
@@ -267,6 +271,14 @@ def _schema_settings(current: dict) -> vol.Schema:
             vol.Required(
                 CONF_AUTO_UPDATE, default=current.get(CONF_AUTO_UPDATE, DEFAULT_AUTO_UPDATE)
             ): selector.BooleanSelector(),
+            vol.Optional(
+                CONF_SCHEDULE_ENABLED,
+                default=current.get(CONF_SCHEDULE_ENABLED, DEFAULT_SCHEDULE_ENABLED),
+            ): selector.BooleanSelector(),
+            vol.Optional(
+                CONF_SCHEDULE_TIME,
+                default=current.get(CONF_SCHEDULE_TIME, DEFAULT_SCHEDULE_TIME),
+            ): selector.TimeSelector(),
             vol.Optional(
                 CONF_IGNORED_DEVICES,
                 default=current.get(CONF_IGNORED_DEVICES, ""),

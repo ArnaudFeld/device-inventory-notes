@@ -216,6 +216,7 @@ def _is_fritz_dect_device(dev, domain: str | None = None) -> bool:
 @dataclass
 class GenerateReport:
     dry_run: bool = False
+    device_filter: str | None = None
     total_scanned: int = 0
     created: list[str] = field(default_factory=list)
     updated: list[str] = field(default_factory=list)
@@ -242,6 +243,7 @@ class GenerateReport:
     def to_dict(self) -> dict:
         return {
             "dry_run": self.dry_run,
+            "device_filter": self.device_filter,
             "total_scanned": self.total_scanned,
             "created": self.created,
             "updated": self.updated,
@@ -316,8 +318,10 @@ class DeviceNoteGenerator:
             path = str(Path(self.hass.config.config_dir) / path)
         return Path(path)
 
-    async def generate(self, dry_run: bool = False) -> GenerateReport:
-        report = GenerateReport(dry_run=dry_run)
+    async def generate(
+        self, dry_run: bool = False, device_id: str | None = None
+    ) -> GenerateReport:
+        report = GenerateReport(dry_run=dry_run, device_filter=device_id)
         root = self.export_root()
         if not dry_run:
             await asyncio.to_thread(root.mkdir, parents=True, exist_ok=True)
@@ -334,7 +338,7 @@ class DeviceNoteGenerator:
         # Devices that are referenced as via_device by others = infrastructure
         # (coordinator, bridge, strip main unit, receiver) -> skipped.
         children_by_parent: dict[str, list[str]] = {}
-        for dev in dreg.devices.values():
+        for dev in dreg.devices:
             if dev.via_device_id:
                 children_by_parent.setdefault(dev.via_device_id, []).append(dev.id)
 
@@ -348,8 +352,13 @@ class DeviceNoteGenerator:
 
         transport_by_device = self._detect_transport(ereg)
 
-        devices = sorted(dreg.devices.values(), key=lambda item: item.id)
+        devices = sorted(dreg.devices, key=lambda item: item.id)
         known_device_ids = {dev.id for dev in devices}
+        if device_id:
+            devices = [dev for dev in devices if dev.id == device_id]
+            if not devices:
+                report.errors.append(f"Unbekannte Geräte-ID: {device_id}")
+                return report
         known_ieees: set[str] = set()
 
         report.total_scanned = len(devices)
@@ -426,18 +435,21 @@ class DeviceNoteGenerator:
             elif action == "existing":
                 report.skipped_existing.append(str(path))
 
-        if dry_run:
-            report.orphaned = await asyncio.to_thread(
-                self._find_orphans, root, known_device_ids, known_ieees
-            )
-        else:
-            report.orphaned = await asyncio.to_thread(
-                self._delete_orphans,
-                root,
-                report,
-                known_device_ids,
-                known_ieees,
-            )
+        # Single-device scans never touch orphans: with only one known
+        # device in the loop, every other note would look orphaned.
+        if device_id is None:
+            if dry_run:
+                report.orphaned = await asyncio.to_thread(
+                    self._find_orphans, root, known_device_ids, known_ieees
+                )
+            else:
+                report.orphaned = await asyncio.to_thread(
+                    self._delete_orphans,
+                    root,
+                    report,
+                    known_device_ids,
+                    known_ieees,
+                )
         if not dry_run:
             index_path = await asyncio.to_thread(self._write_overviews, root)
             report.index_file = str(index_path)
@@ -755,7 +767,7 @@ class DeviceNoteGenerator:
             computed["bereich"] = area_by_id.get(dev.area_id) or ""
             if area.floor_id in floors:
                 computed["etage"] = floors[area.floor_id]
-        via = dreg.devices.get(dev.via_device_id) if dev.via_device_id else None
+        via = dreg.async_get(dev.via_device_id) if dev.via_device_id else None
         if via:
             via_name = device_display_name(via)
             entry_id = next(iter(dev.config_entries), None)
