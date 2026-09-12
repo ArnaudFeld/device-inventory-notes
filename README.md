@@ -64,6 +64,7 @@ eine Notiz pro Gerät, passend zum bestehenden Inventar-System der Obsidian-Vaul
 | Merge-Modus | `Vorhandene aktualisieren` / `Nur neue Notizen` | Standard: aktualisieren |
 | Automatisch aktualisieren | an/aus | Standard: an |
 | Geplanter Tageslauf | an/aus + Uhrzeit | Standard: aus – Sicherheitsnetz (fängt verpasste Änderungen auf, auch bei ausgeschaltetem Auto-Update) |
+| Benachrichtigungs-Dienst | Dienstname, z. B. `notify.mobile_app_xyz` | leer = nur HA-interne Notification; wenn gesetzt, geht bei echten Änderungen zusätzlich ein Push raus |
 | Feldauswahl | mehrere Felder wählbar | Welche HA-Felder in Notizen geschrieben werden (`name` und `ha_device_id` sind immer dabei) |
 | Ignorierte Geräte | Geräte-ID oder Namensbestandteil, eine je Zeile | Geräte werden übersprungen |
 | Trotzdem erstellen | Geräte-ID oder Namensbestandteil, eine je Zeile | erzwingt Mitnahme (überschreibt Infrastruktur- und Identitäts-Filter) |
@@ -86,6 +87,30 @@ umbenannten (`renamed`), übersprungenen Dateien (`skipped_infra`,
 (`errors`), verwaiste Notizen (`orphaned`) und die Änderungen seit dem
 letzten Lauf (`changed_created`, `changed_updated`, `changed_renamed`,
 `changed_removed`).
+
+## Ereignisse als Trigger
+
+Jeder echte Lauf (manuell, Auto-Update, Zeitplan – nie Trockenläufe) feuert am
+Ende `device_inventory_notes_scan_finished` mit Zählern (`created`, `updated`,
+`renamed`, `changed_created`, `changed_updated`, `changed_renamed`,
+`changed_removed`, `changed_total`, `errors`), `total_scanned`, `device_filter`
+und `duration_seconds`. Schlägt ein Lauf fehl, feuert stattdessen
+`device_inventory_notes_scan_failed` mit `error`, `device_filter` und
+`duration_seconds`. Beispiel:
+
+```yaml
+trigger:
+  - platform: event
+    event_type: device_inventory_notes_scan_finished
+condition:
+  - condition: template
+    value_template: "{{ trigger.event.data.changed_total > 0 }}"
+action:
+  - action: notify.mobile_app_xyz
+    data:
+      title: "Inventar aktualisiert"
+      message: "{{ trigger.event.data.changed_total }} Änderungen in {{ trigger.event.data.duration_seconds }} s"
+```
 
 ## Protokoll-Zuordnung
 

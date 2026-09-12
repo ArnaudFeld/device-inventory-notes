@@ -20,15 +20,19 @@ from homeassistant.helpers.event import async_track_time_change
 
 from .const import (
     CONF_AUTO_UPDATE,
+    CONF_NOTIFY_SERVICE,
     CONF_SCHEDULE_ENABLED,
     CONF_SCHEDULE_TIME,
     DEBOUNCE_SECONDS,
+    DEFAULT_NOTIFY_SERVICE,
     DEFAULT_SCHEDULE_ENABLED,
     DEFAULT_SCHEDULE_TIME,
     DOMAIN,
     EVENT_AREA_REGISTRY_UPDATED,
     EVENT_DEVICE_REGISTRY_UPDATED,
     EVENT_ENTITY_REGISTRY_UPDATED,
+    EVENT_SCAN_FAILED,
+    EVENT_SCAN_FINISHED,
     INITIAL_RUN_DELAY,
     SERVICE_SCAN,
 )
@@ -78,18 +82,52 @@ class DeviceInventoryRuntime:
     async def run(
         self, dry_run: bool = False, device_id: str | None = None
     ) -> dict[str, Any]:
+        start = self.hass.loop.time()
         async with self._lock:
             try:
                 self.reload_options()
                 report: GenerateReport = await self.generator.generate(
                     dry_run=dry_run, device_id=device_id
                 )
-            except Exception:
+            except Exception as exc:
                 _LOGGER.exception("Fehler beim Generieren der Geräte-Notizen")
+                if not dry_run:
+                    self.hass.bus.async_fire(
+                        EVENT_SCAN_FAILED,
+                        {
+                            "error": str(exc),
+                            "device_filter": device_id,
+                            "duration_seconds": round(self.hass.loop.time() - start, 1),
+                        },
+                    )
                 raise
+        duration = round(self.hass.loop.time() - start, 1)
         self._log_report(report)
         if not dry_run:
             await self._notify_changes(report)
+            changed_total = (
+                len(report.changed_created)
+                + len(report.changed_updated)
+                + len(report.changed_renamed)
+                + len(report.changed_removed)
+            )
+            self.hass.bus.async_fire(
+                EVENT_SCAN_FINISHED,
+                {
+                    "total_scanned": report.total_scanned,
+                    "created": len(report.created),
+                    "updated": len(report.updated),
+                    "renamed": len(report.renamed),
+                    "changed_created": len(report.changed_created),
+                    "changed_updated": len(report.changed_updated),
+                    "changed_renamed": len(report.changed_renamed),
+                    "changed_removed": len(report.changed_removed),
+                    "changed_total": changed_total,
+                    "errors": len(report.errors),
+                    "device_filter": device_id,
+                    "duration_seconds": duration,
+                },
+            )
         return report.to_dict()
 
     async def _notify_changes(self, report: GenerateReport) -> None:
@@ -158,6 +196,62 @@ class DeviceInventoryRuntime:
                 "message": message,
             },
         )
+        notify_service = self._current_options().get(
+            CONF_NOTIFY_SERVICE, DEFAULT_NOTIFY_SERVICE
+        )
+        if notify_service:
+            await self._push_summary(str(notify_service), report)
+
+    async def _push_summary(
+        self, notify_service: str, report: GenerateReport
+    ) -> None:
+        """Send a short plain-text summary to a notify service (e.g. mobile push).
+
+        Only called when something actually changed. An invalid service name
+        logs a warning instead of failing the run.
+        """
+        german = self.hass.config.language == "de"
+        if german:
+            title = "Geräte-Inventar aktualisiert"
+            words = ("Neu", "Geändert", "Umbenannt", "Entfernt")
+            header = "Geräte-Inventar"
+        else:
+            title = "Device inventory updated"
+            words = ("new", "updated", "renamed", "removed")
+            header = "Device inventory"
+        counts = []
+        for word, items in zip(
+            words,
+            (
+                report.changed_created,
+                report.changed_updated,
+                report.changed_renamed,
+                report.changed_removed,
+            ),
+        ):
+            if items:
+                counts.append(f"{word}: {len(items)}" if german else f"{len(items)} {word}")
+        details = []
+        for path in report.changed_created[:5]:
+            details.append(f"+ {path}")
+        for old_path, new_path in report.changed_renamed[:5]:
+            details.append(f"↔ {old_path} → {new_path}")
+        for path in report.changed_updated[:5]:
+            details.append(f"~ {path}")
+        for path in report.changed_removed[:5]:
+            details.append(f"- {path}")
+        message = f"{header}: " + ", ".join(counts)
+        if details:
+            message += "\n" + "\n".join(details)
+        domain, _, service = notify_service.partition(".")
+        if not service:
+            domain, service = "notify", domain
+        try:
+            await self.hass.services.async_call(
+                domain, service, {"title": title, "message": message}
+            )
+        except Exception:  # noqa: BLE001
+            _LOGGER.warning("Benachrichtigung an %s fehlgeschlagen", notify_service)
 
     def _log_report(self, report: GenerateReport) -> None:
         if report.dry_run:

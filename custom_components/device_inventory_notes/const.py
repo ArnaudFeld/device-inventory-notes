@@ -8,6 +8,9 @@ DOMAIN: Final = "device_inventory_notes"
 
 SERVICE_SCAN: Final = "scan_and_generate"
 
+EVENT_SCAN_FINISHED: Final = "device_inventory_notes_scan_finished"
+EVENT_SCAN_FAILED: Final = "device_inventory_notes_scan_failed"
+
 CONF_EXPORT_DIR: Final = "export_dir"
 CONF_LAYOUT: Final = "layout"
 CONF_MERGE_MODE: Final = "merge_mode"
@@ -21,6 +24,7 @@ CONF_ONLY_AREAS: Final = "only_areas"
 CONF_TYPE_MAP: Final = "type_map"
 CONF_SCHEDULE_ENABLED: Final = "schedule_enabled"
 CONF_SCHEDULE_TIME: Final = "schedule_time"
+CONF_NOTIFY_SERVICE: Final = "notify_service"
 
 LAYOUT_PROTOCOL: Final = "protocol"
 LAYOUT_AREA: Final = "area"
@@ -34,6 +38,7 @@ DEFAULT_MERGE_MODE: Final = MERGE_MODE_MERGE
 DEFAULT_AUTO_UPDATE: Final = True
 DEFAULT_SCHEDULE_ENABLED: Final = False
 DEFAULT_SCHEDULE_TIME: Final = "03:00:00"
+DEFAULT_NOTIFY_SERVICE: Final = ""
 # Obsidian vault path under which the protocol folders live; the dataview
 # queries in the generated overview pages use it as their FROM target.
 DEFAULT_OBSIDIAN_BASE: Final = "02 Home Assistant/Aktoren"
