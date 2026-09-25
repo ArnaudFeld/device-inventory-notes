@@ -44,6 +44,7 @@ from .const import (
     FIELD_ORDER,
     GENERATED_ON_CREATE_FIELDS,
     HAND_FIELDS,
+    KEY_TO_LABEL,
     LAST_STATE_FILENAME,
     LAYOUT_AREA,
     LEGACY_INDEX_FILENAME,
@@ -53,6 +54,7 @@ from .const import (
     OVERVIEW_PROTOCOLS,
     OVERVIEW_ROOT_FILENAME,
     PROTOCOL_MAP,
+    SELECTABLE_FIELDS,
     SERVICE_DOMAINS,
     TYPE_MAP,
 )
@@ -142,6 +144,75 @@ def parse_type_map(raw: str) -> dict[str, str]:
         if domain and label:
             mapping[domain] = label
     return mapping
+
+
+def selected_field_keys(fields) -> set[str]:
+    """Internal frontmatter keys for a list of config-flow field labels.
+
+    The default fields are always part of the selection, mirroring what the
+    options form pre-selects, so the field order keeps offering them.
+    """
+    selected = {FIELD_LABEL_TO_KEY.get(field, field) for field in DEFAULT_FIELDS}
+    selected |= {FIELD_LABEL_TO_KEY.get(field, field) for field in (fields or [])}
+    return selected
+
+
+def selectable_field_options(stored) -> list[str]:
+    """Values for the fields selector: the selectable ones plus stale entries.
+
+    A stored value that is not in SELECTABLE_FIELDS (a hand-added field, or a
+    label from a version that no longer exists) has to stay in the option list,
+    otherwise the selector rejects the whole submitted form and the options
+    flow can no longer be saved at all.
+    """
+    extra = list(
+        dict.fromkeys(
+            field for field in (stored or []) if field not in SELECTABLE_FIELDS
+        )
+    )
+    return [*SELECTABLE_FIELDS, *extra]
+
+
+def order_prefill(current: dict) -> str:
+    """Suggested field order for the options form, one label per line.
+
+    Starts from the stored field_order so a custom order survives reopening
+    the flow, then appends newly selected fields in FIELD_ORDER. Hand-added
+    fields with no FIELD_LABEL_TO_KEY entry are kept, known fields that are no
+    longer selected are dropped.
+    """
+    selected = selected_field_keys(current.get(CONF_FIELDS))
+    known = set(FIELD_LABEL_TO_KEY.values())
+    stored = current.get(CONF_FIELD_ORDER) or []
+    ordered = list(
+        dict.fromkeys(key for key in stored if key in selected or key not in known)
+    )
+    ordered += [key for key in FIELD_ORDER if key in selected and key not in ordered]
+    ordered += sorted(key for key in selected if key not in ordered)
+    return "\n".join(KEY_TO_LABEL.get(key, key) for key in ordered)
+
+
+def normalize_order(value: str) -> tuple[list[str], list[str]]:
+    """Split the order form text into (internal keys, unrecognised lines).
+
+    Labels and raw keys are both accepted, and duplicates collapse. A line that
+    matches no known field is kept as a key so a hand-added field survives, and
+    its original text is returned separately so the flow can tell the user the
+    line has no effect.
+    """
+    keys: list[str] = []
+    unknown: list[str] = []
+    known = set(FIELD_LABEL_TO_KEY.values())
+    for line in (value or "").splitlines():
+        entry = line.strip()
+        if not entry:
+            continue
+        key = FIELD_LABEL_TO_KEY.get(entry, entry)
+        if key not in keys:
+            keys.append(key)
+        if key not in known and entry not in unknown:
+            unknown.append(entry)
+    return keys, unknown
 
 
 def matches_filter(raw: str, device, name: str) -> bool:

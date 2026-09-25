@@ -54,6 +54,9 @@ FIELD_ORDER = const_module.FIELD_ORDER
 HAND_FIELDS = const_module.HAND_FIELDS
 LAYOUT_PROTOCOL = const_module.LAYOUT_PROTOCOL
 MERGE_MODE_MERGE = const_module.MERGE_MODE_MERGE
+CONF_FIELDS = const_module.CONF_FIELDS
+CONF_FIELD_ORDER = const_module.CONF_FIELD_ORDER
+SELECTABLE_FIELDS = const_module.SELECTABLE_FIELDS
 parse_note = generator_module.parse_note
 serialize_note = generator_module.serialize_note
 
@@ -648,6 +651,111 @@ class MirrorConflictTests(unittest.TestCase):
                 "/config", Path("www/device_inventory_notes")
             )
         )
+
+
+class FieldOrderTests(unittest.TestCase):
+    """The order prefill must survive reopening the options flow."""
+
+    DEFAULTS = [
+        "Typ",
+        "Hersteller",
+        "Modell",
+        "Protokoll",
+        "Übersicht",
+        "Friendly Name",
+        "IEEE Address",
+    ]
+    STORED = [
+        "notiz",
+        "typ",
+        "hersteller",
+        "modell",
+        "protokoll",
+        "übersicht",
+        "friendly_name",
+        "ieee_address",
+    ]
+
+    def _current(self, fields=None, order=None):
+        return {
+            CONF_FIELDS: self.DEFAULTS + ["Notiz"] if fields is None else fields,
+            CONF_FIELD_ORDER: self.STORED if order is None else order,
+        }
+
+    def test_prefill_starts_from_the_stored_order(self):
+        current = self._current(order=list(reversed(self.STORED)))
+
+        prefill = generator_module.order_prefill(current).splitlines()
+
+        self.assertEqual(
+            prefill,
+            ["IEEE Address", "Friendly Name", "Übersicht", "Protokoll",
+             "Modell", "Hersteller", "Typ", "Notiz"],
+        )
+
+    def test_prefill_appends_newly_selected_fields_in_default_order(self):
+        current = self._current(fields=self.DEFAULTS + ["Notiz", "Bereich"])
+
+        prefill = generator_module.order_prefill(current).splitlines()
+
+        self.assertEqual(prefill[0], "Notiz")
+        self.assertEqual(prefill[-1], "Bereich")
+
+    def test_prefill_keeps_hand_added_fields(self):
+        current = self._current(order=["notiz", "sonderfeld"] + self.STORED)
+
+        prefill = generator_module.order_prefill(current).splitlines()
+
+        self.assertIn("sonderfeld", prefill)
+
+    def test_prefill_drops_known_fields_that_are_no_longer_selected(self):
+        current = self._current(order=["notiz", "kaufdatum"] + self.STORED)
+
+        prefill = generator_module.order_prefill(current).splitlines()
+
+        self.assertNotIn("Kaufdatum", prefill)
+        self.assertEqual(prefill[0], "Notiz")
+
+    def test_prefill_without_a_stored_order_uses_the_default_order(self):
+        current = self._current(order=[])
+
+        prefill = generator_module.order_prefill(current).splitlines()
+
+        self.assertEqual(prefill, self.DEFAULTS + ["Notiz"])
+
+    def test_normalize_resolves_labels_and_dedupes(self):
+        keys, unknown = generator_module.normalize_order("Typ\nhersteller\nTyp\n")
+
+        self.assertEqual(keys, ["typ", "hersteller"])
+        self.assertEqual(unknown, [])
+
+    def test_normalize_reports_unknown_lines_instead_of_dropping_them(self):
+        keys, unknown = generator_module.normalize_order("Typ\nSonderfeld\nhersteller")
+
+        self.assertEqual(keys, ["typ", "Sonderfeld", "hersteller"])
+        self.assertEqual(unknown, ["Sonderfeld"])
+
+    def test_normalize_ignores_empty_lines(self):
+        keys, unknown = generator_module.normalize_order("\n  \nTyp\n")
+
+        self.assertEqual(keys, ["typ"])
+        self.assertEqual(unknown, [])
+
+
+class FieldSelectionTests(unittest.TestCase):
+    """The fields selector must stay saveable when options hold a stale value."""
+
+    def test_options_start_with_every_selectable_field(self):
+        options = generator_module.selectable_field_options([])
+
+        self.assertEqual(options[: len(SELECTABLE_FIELDS)], list(SELECTABLE_FIELDS))
+
+    def test_options_keep_stored_values_that_are_not_selectable(self):
+        options = generator_module.selectable_field_options(["Typ", "sonderfeld"])
+
+        self.assertIn("sonderfeld", options)
+        self.assertEqual(len(options), len(SELECTABLE_FIELDS) + 1)
+        self.assertEqual(len(set(options)), len(options))
 
 
 if __name__ == "__main__":

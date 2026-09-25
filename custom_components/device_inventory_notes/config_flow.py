@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 import voluptuous as vol
 
 from homeassistant import config_entries
@@ -41,9 +43,6 @@ from .const import (
     DEFAULT_SCHEDULE_TIME,
     DOMAIN,
     EXTRA_PROTOCOL_OPTIONS,
-    FIELD_LABEL_TO_KEY,
-    FIELD_ORDER,
-    KEY_TO_LABEL,
     LAYOUT_AREA,
     LAYOUT_PROTOCOL,
     MERGE_MODE_CREATE_ONLY,
@@ -52,10 +51,17 @@ from .const import (
     OVERVIEW_ROOT_FILENAME,
     PROTOCOL_MAP,
     PROTOCOL_UNKNOWN,
-    SELECTABLE_FIELDS,
     SERVICE_DOMAINS,
 )
-from .generator import device_display_name, mirror_conflicts_with_export
+from .generator import (
+    device_display_name,
+    mirror_conflicts_with_export,
+    normalize_order,
+    order_prefill,
+    selectable_field_options,
+)
+
+_LOGGER = logging.getLogger(__name__)
 
 def _placeholder_links(language: str) -> dict[str, str]:
     """Fertige Anker für die Flow-Beschreibung (ICU erlaubt kein HTML im Template)."""
@@ -104,7 +110,7 @@ def _schema_fields(current: dict) -> vol.Schema:
                     mode=selector.SelectSelectorMode.LIST,
                     options=[
                         selector.SelectOptionDict(value=field, label=field)
-                        for field in SELECTABLE_FIELDS
+                        for field in selectable_field_options(current.get(CONF_FIELDS))
                     ],
                 )
             ),
@@ -112,44 +118,18 @@ def _schema_fields(current: dict) -> vol.Schema:
     )
 
 
-def _selected_keys(current: dict) -> list[str]:
-    """Resolve the selected fields (labels) to internal frontmatter keys."""
-    selected = {FIELD_LABEL_TO_KEY.get(field, field) for field in DEFAULT_FIELDS}
-    user_fields = current.get(CONF_FIELDS)
-    if user_fields:
-        selected |= {FIELD_LABEL_TO_KEY.get(field, field) for field in user_fields}
-    return selected
-
-
 def _schema_order(current: dict) -> vol.Schema:
     """Order step: multiline text field, one field per line, line order = note order."""
-    selected = _selected_keys(current)
-    ordered = [key for key in FIELD_ORDER if key in selected]
-    ordered += [key for key in selected if key not in ordered]
-    default_text = "\n".join(KEY_TO_LABEL.get(key, key) for key in ordered)
     return vol.Schema(
         {
             vol.Optional(
                 CONF_FIELD_ORDER,
-                default=default_text,
+                default=order_prefill(current),
             ): selector.TextSelector(
                 selector.TextSelectorConfig(multiline=True)
             ),
         }
     )
-
-
-def _normalize_order(value: str) -> list[str]:
-    """Split the order text into internal keys: lines, labels or keys, deduped."""
-    result: list[str] = []
-    for line in value.splitlines():
-        entry = line.strip()
-        if not entry:
-            continue
-        key = FIELD_LABEL_TO_KEY.get(entry, entry)
-        if key in FIELD_LABEL_TO_KEY.values() and key not in result:
-            result.append(key)
-    return result
 
 
 def _candidate_domains(hass) -> dict[str, int]:
@@ -359,9 +339,17 @@ class DeviceInventoryNotesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_order(self, user_input=None):
         if user_input is not None:
-            self._flow_data[CONF_FIELD_ORDER] = _normalize_order(
-                user_input.get(CONF_FIELD_ORDER) or ""
-            )
+            keys, unknown = normalize_order(user_input.get(CONF_FIELD_ORDER) or "")
+            if unknown:
+                # Kein Formularfehler: der Prefill bietet selbst Zeilen an, die
+                # keinem bekannten Feld entsprechen (handgepflegte Felder). Ein
+                # Fehler würde das Speichern blockieren und genau diese Felder
+                # unwiederbringlich entfernen.
+                _LOGGER.warning(
+                    "Reihenfolge: Zeile ohne bekanntes Feld, bleibt ohne Wirkung: %s",
+                    ", ".join(unknown),
+                )
+            self._flow_data[CONF_FIELD_ORDER] = keys
             return await self.async_step_settings()
         return self.async_show_form(
             step_id="order",
@@ -417,9 +405,17 @@ class DeviceInventoryNotesOptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_order(self, user_input=None):
         if user_input is not None:
-            self._flow_data[CONF_FIELD_ORDER] = _normalize_order(
-                user_input.get(CONF_FIELD_ORDER) or ""
-            )
+            keys, unknown = normalize_order(user_input.get(CONF_FIELD_ORDER) or "")
+            if unknown:
+                # Kein Formularfehler: der Prefill bietet selbst Zeilen an, die
+                # keinem bekannten Feld entsprechen (handgepflegte Felder). Ein
+                # Fehler würde das Speichern blockieren und genau diese Felder
+                # unwiederbringlich entfernen.
+                _LOGGER.warning(
+                    "Reihenfolge: Zeile ohne bekanntes Feld, bleibt ohne Wirkung: %s",
+                    ", ".join(unknown),
+                )
+            self._flow_data[CONF_FIELD_ORDER] = keys
             return await self.async_step_extra()
         return self.async_show_form(
             step_id="order",
