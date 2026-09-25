@@ -42,7 +42,6 @@ from .const import (
     DEFAULT_OBSIDIAN_BASE,
     FIELD_LABEL_TO_KEY,
     FIELD_ORDER,
-    GENERATED_ON_CREATE_FIELDS,
     HAND_FIELDS,
     KEY_TO_LABEL,
     LAST_STATE_FILENAME,
@@ -483,8 +482,10 @@ class DeviceNoteGenerator:
 
         transport_by_device = self._detect_transport(ereg)
 
-        # Single full-tree read per run: identity index backing stale-note
-        # and orphan lookups, so those no longer scan the tree per device.
+        # Pre-run identity index, backing the stale-note and orphan lookups so
+        # neither has to scan the tree per device. _write_changelog() reads the
+        # tree a second time afterwards on purpose: it has to see the content
+        # this run just wrote, and notes no device in this run touched.
         note_index = await asyncio.to_thread(self._index_note_ids, root)
         previous_state = await asyncio.to_thread(self._load_last_state, root)
         by_device_id: dict[str, Path] = {}
@@ -911,10 +912,9 @@ class DeviceNoteGenerator:
     def _index_note_ids(self, root: Path) -> dict[str, dict]:
         """relpath -> {device_id, ieee} for every note in the export tree.
 
-        Single full-tree read per run backing stale-note and orphan lookups.
-        Overviews carry no device identity and are excluded; notes survive a
-        layout switch (protocol folders <-> area folders) since matching is
-        by identity, not by path.
+        Backs the stale-note and orphan lookups. Overviews carry no device
+        identity and are excluded; notes survive a layout switch (protocol
+        folders <-> area folders) since matching is by identity, not by path.
         """
         notes: dict[str, dict] = {}
         if not root.is_dir():
@@ -1149,11 +1149,10 @@ class DeviceNoteGenerator:
                     final[key] = existing_fields[key]
                 elif key in HAND_FIELDS and key in self.fields:
                     final[key] = ""
-                elif (
-                    key in self.fields
-                    and (key == "typ" or key not in GENERATED_ON_CREATE_FIELDS)
-                    and computed.get(key)
-                ):
+                elif key in self.fields and computed.get(key):
+                    # Existing values win above, so this only fills a field the
+                    # note does not have yet. That covers the create-only case
+                    # for every computed field, not just typ.
                     final[key] = computed[key]
             if "note_type" in self.fields:
                 final["note_type"] = "actor"

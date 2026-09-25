@@ -44,41 +44,7 @@ DEFAULT_NOTIFY_SERVICE: Final = ""
 # queries in the generated overview pages use it as their FROM target.
 DEFAULT_OBSIDIAN_BASE: Final = "02 Home Assistant/Aktoren"
 
-# Fields that HA can fill. Everything else in a note file is a "hand field"
-# (lagerort, menge, kaufdatum, ...) and must NEVER be overwritten.
-HA_FIELDS: Final = frozenset(
-    {
-        "name",
-        "typ",
-        "hersteller",
-        "modell",
-        "protokoll",
-        "übersicht",
-        "friendly_name",
-        "ieee_address",
-        "ha_device_id",
-        "firmware",
-        "hardware_revision",
-        "seriennummer",
-        "mac",
-        "bereich",
-        "etage",
-        "verbunden_über",
-        "Integration",
-        "entity_count",
-        "config_url",
-        "note_type",
-        "entity_type",
-        "updated",
-    }
-)
-
 ACTOR_METADATA_FIELDS: Final = frozenset({"note_type", "entity_type", "updated"})
-
-# Values HA could recompute, but the user may have corrected (e.g. typ on a
-# device whose entities are ambiguous). Only filled when the target has no
-# value yet.
-GENERATED_ON_CREATE_FIELDS: Final = frozenset({"typ"})
 
 # Hand-maintained fields. They are written as empty placeholders when
 # selected, and are never overwritten when present in an existing note.
@@ -275,8 +241,6 @@ TYPE_MAP: Final[dict[str, str]] = {
     "remote": "Fernbedienung",
     "switch": "Steckdose",
 }
-
-DEFAULT_TYPE: Final = "Sensor"
 
 # Extra protocol mapping configured by the user in the options flow.
 CONF_EXTRA_MAP: Final = "extra_map"
