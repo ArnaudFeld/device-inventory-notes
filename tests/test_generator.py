@@ -64,6 +64,17 @@ class FixedDateTime:
         return DateTime(2026, 9, 25, 12, 0, 0)
 
 
+class _SingleEntryDevice(SimpleNamespace):
+    """Device stub that explodes when the deprecated property is read."""
+
+    @property
+    def config_entries(self):
+        raise AssertionError(
+            "DeviceEntry.config_entries ist seit 2026.8 abgeschafft – "
+            "DeviceEntry.config_entry_id verwenden"
+        )
+
+
 class DeviceNoteGeneratorTests(unittest.TestCase):
     def test_constructor_reads_device_type_map(self):
         hass = SimpleNamespace(config=SimpleNamespace(config_dir="/config"))
@@ -90,16 +101,24 @@ class DeviceNoteGeneratorTests(unittest.TestCase):
         generator.obsidian_base = "Aktoren"
         return generator
 
-    def _device(self, device_id: str = "device-1", name: str = "Actor"):
-        return SimpleNamespace(
+    def _device(
+        self,
+        device_id: str = "device-1",
+        name: str = "Actor",
+        config_entry_id: str | None = None,
+        identifiers: tuple = (),
+        model: str = "Model 1",
+    ):
+        return _SingleEntryDevice(
             id=device_id,
             name_by_user=None,
             name=name,
             default_name=None,
             manufacturer="ACME",
-            model="Model 1",
+            model=model,
             via_device_id=None,
-            config_entries=set(),
+            config_entry_id=config_entry_id,
+            identifiers=identifiers,
             area_id=None,
             sw_version=None,
             hw_version=None,
@@ -433,6 +452,102 @@ class DeviceNoteGeneratorTests(unittest.TestCase):
                 self.assertNotIn("entity_type:", text)
                 self.assertNotIn("updated:", text)
                 self.assertNotIn("status:", text)
+
+    def test_resolve_protocol_uses_the_config_entry_id(self):
+        device = self._device(config_entry_id="entry-zha")
+
+        protocol, ieee = generator_module.DeviceNoteGenerator._resolve_protocol(
+            device, {"entry-zha": "zha"}
+        )
+
+        self.assertEqual(protocol, "Zigbee")
+        self.assertIsNone(ieee)
+
+    def test_resolve_protocol_ignores_a_device_without_config_entry(self):
+        device = self._device(config_entry_id=None, identifiers=(("zha", "00:11:22:33:44:55:66:77"),))
+
+        protocol, ieee = generator_module.DeviceNoteGenerator._resolve_protocol(
+            device, {"entry-zha": "zha"}
+        )
+
+        self.assertEqual(protocol, "Zigbee")
+        self.assertEqual(ieee, "00:11:22:33:44:55:66:77")
+
+    def test_resolve_protocol_skips_tracked_fritz_clients(self):
+        tracked = self._device(
+            config_entry_id="entry-fritz",
+            model="FRITZ!Box Tracked device",
+            identifiers=(("fritz", "tracked-client"),),
+        )
+        product = self._device(
+            device_id="device-2",
+            config_entry_id="entry-fritz",
+            model="FRITZ!DECT 300",
+        )
+        entry_domain = {"entry-fritz": "fritz"}
+
+        self.assertEqual(
+            generator_module.DeviceNoteGenerator._resolve_protocol(tracked, entry_domain),
+            (None, None),
+        )
+        self.assertEqual(
+            generator_module.DeviceNoteGenerator._resolve_protocol(product, entry_domain),
+            ("DECT", None),
+        )
+
+    def test_computed_fields_read_the_integration_from_the_config_entry_id(self):
+        generator = self._generator(Path("/config"))
+        device = self._device(config_entry_id="entry-z2m")
+
+        computed = generator._computed_fields(
+            device,
+            "Actor",
+            "Zigbee",
+            None,
+            {"light"},
+            {},
+            {},
+            {},
+            {"entry-z2m": "Zigbee2MQTT"},
+            None,
+        )
+
+        self.assertEqual(computed["Integration"], "Zigbee2MQTT")
+
+    def test_computed_fields_omit_integration_without_config_entry(self):
+        generator = self._generator(Path("/config"))
+        device = self._device(config_entry_id=None)
+
+        computed = generator._computed_fields(
+            device, "Actor", "Zigbee", None, {"light"}, {}, {}, {}, {}, None
+        )
+
+        self.assertNotIn("Integration", computed)
+
+
+class DeprecatedApiTests(unittest.TestCase):
+    """No code path may read DeviceEntry.config_entries any more.
+
+    Every device stub in this suite is a _SingleEntryDevice, so this test is
+    the belt to _device()'s braces: it exercises the paths that the note
+    writer and the protocol resolver share.
+    """
+
+    def test_write_note_never_reads_config_entries(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            helper = DeviceNoteGeneratorTests()
+            generator = helper._generator(root)
+            device = helper._device(config_entry_id="entry-zha")
+            helper._write(generator, root, device, "Actor", {"light"})
+            generator._computed_fields(
+                device, "Actor", "Zigbee", None, {"light"}, {}, {}, {}, {}, None
+            )
+
+    def test_resolve_protocol_never_reads_config_entries(self):
+        device = DeviceNoteGeneratorTests()._device(config_entry_id="entry-zha")
+
+        generator_module.DeviceNoteGenerator._resolve_protocol(device, {})
 
 
 if __name__ == "__main__":

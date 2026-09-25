@@ -666,17 +666,19 @@ class DeviceNoteGenerator:
         """protocol value + optional ieee address for the device.
 
         User-configured mappings from the options flow (extra_map) win over
-        the built-in PROTOCOL_MAP.
+        the built-in PROTOCOL_MAP. A device belongs to exactly one config
+        entry, so the owning integration is read once; if it does not yield a
+        protocol the identifiers are tried next.
         """
         extra_map = extra_map or {}
-        for entry_id in dev.config_entries:
-            domain = entry_domain.get(entry_id)
-            if domain in extra_map:
-                return extra_map[domain], None
-            if domain in PROTOCOL_MAP:
-                if domain in {"fritz", "fritzbox"} and not _is_fritz_dect_device(dev, domain):
-                    continue
-                return PROTOCOL_MAP[domain], None
+        entry_id = dev.config_entry_id
+        domain = entry_domain.get(entry_id) if entry_id else None
+        if domain in extra_map:
+            return extra_map[domain], None
+        if domain in PROTOCOL_MAP and not (
+            domain in {"fritz", "fritzbox"} and not _is_fritz_dect_device(dev, domain)
+        ):
+            return PROTOCOL_MAP[domain], None
         for identifier in dev.identifiers:
             domain = identifier[0]
             value = identifier[1] if len(identifier) > 1 else None
@@ -878,16 +880,14 @@ class DeviceNoteGenerator:
             if area.floor_id in floors:
                 computed["etage"] = floors[area.floor_id]
         via = dreg.async_get(dev.via_device_id) if dev.via_device_id else None
+        entry_id = dev.config_entry_id
         if via:
             via_name = device_display_name(via)
-            entry_id = next(iter(dev.config_entries), None)
-            entry = entry_title.get(entry_id) if entry_id else None
-            if via_name and via_name != entry:
+            if via_name and via_name != entry_title.get(entry_id, ""):
                 computed["verbunden_über"] = via_name
-        if dev.config_entries:
-            title = entry_title.get(next(iter(dev.config_entries)), "")
-            if title:
-                computed["Integration"] = title
+        title = entry_title.get(entry_id, "") if entry_id else ""
+        if title:
+            computed["Integration"] = title
         if domains:
             computed["entity_count"] = str(len(domains))
         entity_type = self._infer_entity_type(domains)

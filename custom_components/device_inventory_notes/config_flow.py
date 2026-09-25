@@ -183,10 +183,10 @@ def _candidate_domains(hass) -> dict[str, int]:
             continue
         domains_found: set[str] = set()
         has_zigbee_mqtt = False
-        for entry_id in dev.config_entries:
-            domain = entry_domain.get(entry_id)
-            if domain:
-                domains_found.add(domain)
+        entry_id = dev.config_entry_id
+        domain = entry_domain.get(entry_id) if entry_id else None
+        if domain:
+            domains_found.add(domain)
         for ident in dev.identifiers:
             if not ident:
                 continue
