@@ -22,6 +22,7 @@ CONF_FIELD_ORDER: Final = "field_order"
 CONF_OBSIDIAN_BASE: Final = "obsidian_base"
 CONF_ONLY_AREAS: Final = "only_areas"
 CONF_TYPE_MAP: Final = "type_map"
+CONF_DEVICE_TYPE_MAP: Final = "device_type_map"
 CONF_SCHEDULE_ENABLED: Final = "schedule_enabled"
 CONF_SCHEDULE_TIME: Final = "schedule_time"
 CONF_NOTIFY_SERVICE: Final = "notify_service"
@@ -52,6 +53,7 @@ HA_FIELDS: Final = frozenset(
         "hersteller",
         "modell",
         "protokoll",
+        "übersicht",
         "friendly_name",
         "ieee_address",
         "ha_device_id",
@@ -65,8 +67,13 @@ HA_FIELDS: Final = frozenset(
         "Integration",
         "entity_count",
         "config_url",
+        "note_type",
+        "entity_type",
+        "updated",
     }
 )
+
+ACTOR_METADATA_FIELDS: Final = frozenset({"note_type", "entity_type", "updated"})
 
 # Values HA could recompute, but the user may have corrected (e.g. typ on a
 # device whose entities are ambiguous). Only filled when the target has no
@@ -95,6 +102,7 @@ FIELD_LABEL_TO_KEY: Final[dict[str, str]] = {
     "Hersteller": "hersteller",
     "Modell": "modell",
     "Protokoll": "protokoll",
+    "Übersicht": "übersicht",
     "Typ": "typ",
     "Friendly Name": "friendly_name",
     "IEEE Address": "ieee_address",
@@ -130,6 +138,7 @@ DEFAULT_FIELDS: Final = (
     "Hersteller",
     "Modell",
     "Protokoll",
+    "Übersicht",
     "Typ",
     "Friendly Name",
     "IEEE Address",
@@ -137,10 +146,14 @@ DEFAULT_FIELDS: Final = (
 
 # Field order mirrors the existing note templates.
 FIELD_ORDER: Final = (
+    "note_type",
+    "entity_type",
+    "updated",
     "typ",
     "hersteller",
     "modell",
     "protokoll",
+    "übersicht",
     "transport",
     "friendly_name",
     "name",
@@ -243,6 +256,8 @@ SERVICE_DOMAINS: Final = frozenset(
 )
 
 # Entity domains (in priority order) -> typ suggestion for CREATE only.
+# 'switch' stays last on purpose: a relay is often just a secondary function
+# (e.g. a vacuum with switch entities), so more specific domains win.
 TYPE_MAP: Final[dict[str, str]] = {
     "climate": "Klima",
     "cover": "Rolladen",
@@ -250,6 +265,14 @@ TYPE_MAP: Final[dict[str, str]] = {
     "light": "Lampe",
     "lock": "Schloss",
     "media_player": "Lautsprecher",
+    "vacuum": "Staubsauger",
+    "camera": "Kamera",
+    "humidifier": "Luftbefeuchter",
+    "valve": "Ventil",
+    "lawn_mower": "Mähroboter",
+    "siren": "Sirene",
+    "water_heater": "Warmwasserbereiter",
+    "remote": "Fernbedienung",
     "switch": "Steckdose",
 }
 

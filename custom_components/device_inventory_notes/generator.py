@@ -22,8 +22,10 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import floor_registry as flr
 
 from .const import (
+    ACTOR_METADATA_FIELDS,
     CHANGELOG_FILENAME,
     CHANGELOG_MAX_ENTRIES,
+    CONF_DEVICE_TYPE_MAP,
     CONF_EXPORT_DIR,
     CONF_EXTRA_MAP,
     CONF_FIELD_ORDER,
@@ -41,7 +43,6 @@ from .const import (
     FIELD_LABEL_TO_KEY,
     FIELD_ORDER,
     GENERATED_ON_CREATE_FIELDS,
-    HA_FIELDS,
     HAND_FIELDS,
     LAST_STATE_FILENAME,
     LAYOUT_AREA,
@@ -78,6 +79,11 @@ RETIRED_HA_FIELDS: frozenset[str] = frozenset()
 _MATTER_TRANSPORT_MARKERS: tuple[tuple[str, str], ...] = (
     ("ThreadDiagnostics", "Thread"),
     ("WiFiDiagnostics", "WiFi"),
+)
+
+_NOTE_DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_NOTE_RENAME_FIELDS = frozenset(
+    {"name", "friendly_name", "übersicht", "updated", "note_type", "entity_type"}
 )
 
 
@@ -164,7 +170,7 @@ def parse_note(text: str) -> tuple[dict[str, str], str] | None:
     if not isinstance(data, dict):
         return None
     fields = {str(k): str(v) for k, v in data.items() if v is not None}
-    body = "\n".join(lines[end + 1 :]).strip("\n")
+    body = "\n".join(lines[end + 1 :])
     return fields, body
 
 
@@ -277,7 +283,10 @@ class DeviceNoteGenerator:
     def __init__(self, hass: HomeAssistant, options: dict) -> None:
         self.hass = hass
         self.options = options
-        self.export_dir = options.get(CONF_EXPORT_DIR) or DEFAULT_EXPORT_DIR
+        raw_export_dir = options.get(CONF_EXPORT_DIR) or DEFAULT_EXPORT_DIR
+        # Tolerate surrounding whitespace; absolute paths (e.g. /share/...)
+        # are used as-is, relative ones resolve below against the config dir.
+        self.export_dir = raw_export_dir.strip() or DEFAULT_EXPORT_DIR
         self.obsidian_base = options.get(CONF_OBSIDIAN_BASE) or DEFAULT_OBSIDIAN_BASE
         self.layout = options.get(CONF_LAYOUT)
         self.merge_mode = options.get(CONF_MERGE_MODE)
@@ -287,6 +296,11 @@ class DeviceNoteGenerator:
         self.extra_map = dict(options.get(CONF_EXTRA_MAP) or {})
         # User-configured type labels override/extend TYPE_MAP.
         self.custom_type_map = parse_type_map(options.get(CONF_TYPE_MAP, ""))
+        # User-configured per-device type labels ("fragment: label" lines,
+        # matched against device name, id or model). Wins over domain rules.
+        self.custom_device_type_map = parse_type_map(
+            options.get(CONF_DEVICE_TYPE_MAP, "")
+        )
         # Always start with DEFAULT_FIELDS, then add any user-selected fields.
         # The config flow stores display labels; resolve them to the internal
         # frontmatter keys. Unknown entries pass through unchanged.
@@ -296,7 +310,7 @@ class DeviceNoteGenerator:
             selected |= {
                 FIELD_LABEL_TO_KEY.get(field, field) for field in user_fields
             }
-        self.fields: set[str] = selected | {"name", "ha_device_id"}
+        self.fields: set[str] = selected | {"name", "ha_device_id"} | ACTOR_METADATA_FIELDS
 
         # Field order for the note frontmatter. The config flow stores a
         # user-defined order (internal keys); any selected field not listed
@@ -326,6 +340,7 @@ class DeviceNoteGenerator:
     ) -> GenerateReport:
         report = GenerateReport(dry_run=dry_run, device_filter=device_id)
         root = self.export_root()
+        _LOGGER.info("Export-Verzeichnis: %s", root)
         if not dry_run:
             await asyncio.to_thread(root.mkdir, parents=True, exist_ok=True)
 
@@ -358,6 +373,7 @@ class DeviceNoteGenerator:
         # Single full-tree read per run: identity index backing stale-note
         # and orphan lookups, so those no longer scan the tree per device.
         note_index = await asyncio.to_thread(self._index_note_ids, root)
+        previous_state = await asyncio.to_thread(self._load_last_state, root)
         by_device_id: dict[str, Path] = {}
         by_ieee: dict[str, Path] = {}
         for rel, info in note_index.items():
@@ -375,6 +391,9 @@ class DeviceNoteGenerator:
                 report.errors.append(f"Unbekannte Geräte-ID: {device_id}")
                 return report
         known_ieees: set[str] = set()
+        # Devices explicitly ignored by the user: their notes are treated as
+        # removable, otherwise an ignored note could never disappear.
+        ignored_device_ids: set[str] = set()
 
         report.total_scanned = len(devices)
         for dev in devices:
@@ -394,6 +413,7 @@ class DeviceNoteGenerator:
                 continue
             elif matches_filter(self.ignored, dev, name):
                 report.skipped_ignored.append(f"{name} ({dev.id})")
+                ignored_device_ids.add(dev.id)
                 continue
             elif children_by_parent.get(dev.id):
                 report.skipped_infra.append(f"{name} ({dev.id})")
@@ -435,10 +455,12 @@ class DeviceNoteGenerator:
                     entry_title,
                     dreg,
                     transport_by_device,
-                    by_device_id,
-                    by_ieee,
-                    dry_run,
-                )
+                     by_device_id,
+                     by_ieee,
+                     dry_run,
+                     previous_state,
+                 )
+
             except OSError as exc:
                 report.errors.append(f"{name}: {exc}")
                 continue
@@ -452,6 +474,9 @@ class DeviceNoteGenerator:
             elif action == "existing":
                 report.skipped_existing.append(str(path))
 
+        # Notes of ignored devices are removable as well: the device stays
+        # registered, so the plain orphan check would keep them forever.
+        known_device_ids -= ignored_device_ids
         # Single-device scans never touch orphans: with only one known
         # device in the loop, every other note would look orphaned.
         if device_id is None:
@@ -499,11 +524,12 @@ class DeviceNoteGenerator:
             parsed = parse_note(text)
             if not parsed:
                 continue
-            fields, _body = parsed
+            fields, body = parsed
             notes[str(path.relative_to(root))] = {
                 "device_id": fields.get("ha_device_id", ""),
                 "ieee": fields.get("ieee_address", ""),
                 "hash": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+                "body": body,
             }
         return notes
 
@@ -608,20 +634,29 @@ class DeviceNoteGenerator:
                     old_sections.append(section.rstrip("\n"))
 
         lines = [f"## {datetime.now().strftime('%Y-%m-%d %H:%M')}"]
-        for path in created:
-            lines.append(f"+ {path}")
-        for old_path, new_path in renamed:
-            lines.append(f"↔ {old_path} → {new_path}")
-        for path in updated:
-            lines.append(f"~ {path}")
-        for path in removed:
-            lines.append(f"- {path}")
+        if created:
+            lines.append(f"**Neu ({len(created)}):**")
+            for path in created:
+                lines.append(f"- {path}")
+        if renamed:
+            lines.append(f"**Umbenannt ({len(renamed)}):**")
+            for old_path, new_path in renamed:
+                lines.append(f"↔ {old_path} → {new_path}")
+        if updated:
+            lines.append(f"**Geändert ({len(updated)}):**")
+            for path in updated:
+                lines.append(f"- {path}")
+        if removed:
+            lines.append(f"**Entfernt ({len(removed)}):**")
+            for path in removed:
+                lines.append(f"- {path}")
         section = "\n".join(lines)
 
         sections = [section] + old_sections[: CHANGELOG_MAX_ENTRIES - 1]
-        header = "# CHANGELOG\n\n"
+        # No "# CHANGELOG" heading: Obsidian shows the file name as inline
+        # title already, a heading would display the word twice.
         changelog_path.write_text(
-            header + "\n\n".join(sections) + "\n", encoding="utf-8"
+            "\n\n".join(sections) + "\n", encoding="utf-8"
         )
 
     @staticmethod
@@ -705,6 +740,38 @@ class DeviceNoteGenerator:
             if domain in domains:
                 return label
         return self._infer_type(domains)
+
+    @staticmethod
+    def _infer_entity_type(domains: set[str]) -> str | None:
+        normalized = {
+            domain.strip().lower() for domain in domains if domain and domain.strip()
+        }
+        if len(normalized) != 1:
+            return None
+        return next(iter(normalized))
+
+    def _match_device_type(
+        self, device_id: str, name: str, model: str | None
+    ) -> str | None:
+        """Match user-configured device override lines ("fragment: label").
+
+        An exact device_id match wins first; otherwise the first line whose
+        fragment occurs (case-insensitive) in the device name or model wins.
+        Returns None when nothing matches. Only used to fill an empty typ,
+        so hand-maintained values are never overwritten.
+        """
+        if not self.custom_device_type_map:
+            return None
+        lowered_id = (device_id or "").lower()
+        for fragment, label in self.custom_device_type_map.items():
+            if fragment and fragment == lowered_id:
+                return label
+        name_lower = (name or "").lower()
+        model_lower = (model or "").lower()
+        for fragment, label in self.custom_device_type_map.items():
+            if fragment and (fragment in name_lower or fragment in model_lower):
+                return label
+        return None
 
     def _matches_area_filter(self, dev, area_by_id: dict[str, str]) -> bool:
         """True if the device area matches at least one configured filter value.
@@ -823,14 +890,43 @@ class DeviceNoteGenerator:
                 computed["Integration"] = title
         if domains:
             computed["entity_count"] = str(len(domains))
+        entity_type = self._infer_entity_type(domains)
+        if entity_type:
+            computed["entity_type"] = entity_type
         if getattr(dev, "configuration_url", None):
             computed["config_url"] = str(dev.configuration_url)
 
-        inferred_typ = self._infer_type_custom(domains)
-        if inferred_typ:
-            computed["typ"] = inferred_typ
+        override_typ = self._match_device_type(dev.id, name, dev.model)
+        if override_typ:
+            computed["typ"] = override_typ
+        else:
+            inferred_typ = self._infer_type_custom(domains)
+            if inferred_typ:
+                computed["typ"] = inferred_typ
+
+        # Graph link to the protocol overview (Obsidian parses wikilinks in
+        # frontmatter values, quoted or not). Always protocol-based, even in
+        # area layout, so the note lands in its protocol cluster.
+        computed["übersicht"] = (
+            f"[[{OVERVIEW_FILENAME_TEMPLATE.format(proto=protocol)[:-3]}]]"
+        )
 
         return {key: value for key, value in computed.items() if value}
+
+    @staticmethod
+    def _content_signature(
+        fields: dict[str, str], body: str
+    ) -> tuple[tuple[str, str], str]:
+        content = {
+            key: value
+            for key, value in fields.items()
+            if key not in _NOTE_RENAME_FIELDS
+        }
+        return tuple(sorted(content.items())), body
+
+    @staticmethod
+    def _valid_updated(value: str | None) -> bool:
+        return bool(value and _NOTE_DATE_PATTERN.fullmatch(value))
 
     def _write_note(
         self,
@@ -847,10 +943,12 @@ class DeviceNoteGenerator:
         entry_title: dict[str, str],
         dreg,
         transport_by_device: dict[str, str],
-        by_device_id: dict[str, Path],
-        by_ieee: dict[str, Path],
-        dry_run: bool,
-    ) -> tuple[str, Path, Path | None]:
+         by_device_id: dict[str, Path],
+         by_ieee: dict[str, Path],
+         dry_run: bool,
+         previous_state: dict[str, dict] | None = None,
+     ) -> tuple[str, Path, Path | None]:
+
         folder = root / safe_filename(self._folder_name(dev, protocol, area_by_id))
         target = folder / f"{safe_filename(name)}.md"
 
@@ -884,11 +982,18 @@ class DeviceNoteGenerator:
 
         if existing_path is None:
             final = {}
-            for key in self.field_order:
+            output_order = self.field_order
+            for key in output_order:
                 if key in computed and key in self.fields:
                     final[key] = computed[key]
                 elif key in HAND_FIELDS and key in self.fields:
                     final[key] = ""
+            if "note_type" in self.fields:
+                final["note_type"] = "actor"
+            if "entity_type" in self.fields and computed.get("entity_type"):
+                final["entity_type"] = computed["entity_type"]
+            if "updated" in self.fields:
+                final["updated"] = datetime.now().strftime("%Y-%m-%d")
             if (
                 protocol == "Matter"
                 and "transport" in self.fields
@@ -906,22 +1011,37 @@ class DeviceNoteGenerator:
                 )
                 return "error", existing_path, None
             existing_fields, existing_body = parsed
+            output_order = self.field_order
+            output_order += tuple(
+                key
+                for key in existing_fields
+                if key not in output_order and key not in RETIRED_HA_FIELDS
+            )
+            if "notiz" in output_order:
+                output_order = tuple(key for key in output_order if key != "notiz") + (
+                    "notiz",
+                )
             final = {}
-            for key in self.field_order:
+            for key in output_order:
                 if key in existing_fields:
                     if key in RETIRED_HA_FIELDS:
-                        continue
-                    if key in HA_FIELDS and key not in self.fields:
                         continue
                     final[key] = existing_fields[key]
                 elif key in HAND_FIELDS and key in self.fields:
                     final[key] = ""
                 elif (
                     key in self.fields
-                    and key not in GENERATED_ON_CREATE_FIELDS
+                    and (key == "typ" or key not in GENERATED_ON_CREATE_FIELDS)
                     and computed.get(key)
                 ):
                     final[key] = computed[key]
+            if "note_type" in self.fields:
+                final["note_type"] = "actor"
+            if "entity_type" in self.fields:
+                if computed.get("entity_type"):
+                    final["entity_type"] = computed["entity_type"]
+                else:
+                    final.pop("entity_type", None)
             if (
                 protocol == "Matter"
                 and "transport" in self.fields
@@ -931,6 +1051,29 @@ class DeviceNoteGenerator:
                 final["transport"] = transport_by_device[dev.id]
             if computed.get("name"):
                 final["name"] = computed["name"]
+            if (
+                "übersicht" in self.fields
+                and not final.get("übersicht")
+                and computed.get("übersicht")
+            ):
+                final["übersicht"] = computed["übersicht"]
+            previous_body = (previous_state or {}).get(
+                str(existing_path.relative_to(root)), {}
+            ).get("body")
+            comparison_body = (
+                previous_body if isinstance(previous_body, str) else existing_body
+            )
+            content_changed = self._content_signature(
+                existing_fields, comparison_body
+            ) != self._content_signature(final, existing_body)
+            existing_updated = existing_fields.get("updated")
+            if "updated" in self.fields:
+                if content_changed:
+                    final["updated"] = datetime.now().strftime("%Y-%m-%d")
+                elif self._valid_updated(existing_updated):
+                    final["updated"] = existing_updated
+                else:
+                    final.pop("updated", None)
             action = "updated"
             if existing_path != target:
                 action = "renamed"
@@ -940,7 +1083,7 @@ class DeviceNoteGenerator:
 
         folder.mkdir(parents=True, exist_ok=True)
         emit_empty = frozenset(key for key in HAND_FIELDS if key in self.fields)
-        content = serialize_note(final, self.field_order, emit_empty)
+        content = serialize_note(final, output_order, emit_empty)
         if existing_body:
             content += "\n" + existing_body
         content += "\n"
@@ -1014,6 +1157,8 @@ class DeviceNoteGenerator:
                 "---",
                 "",
                 f"# ⚡ {proto}-Aktoren",
+                "",
+                f"[[{OVERVIEW_ROOT_FILENAME[:-3]}|← Zurück zur Übersicht]]",
                 "",
                 "```dataview",
                 "TABLE WITHOUT ID",

@@ -12,6 +12,7 @@ from urllib.parse import quote
 
 from .const import (
     CONF_AUTO_UPDATE,
+    CONF_DEVICE_TYPE_MAP,
     CONF_EXPORT_DIR,
     CONF_EXTRA_DOMAINS,
     CONF_EXTRA_MAP,
@@ -300,6 +301,10 @@ def _schema_settings(current: dict) -> vol.Schema:
             vol.Optional(
                 CONF_TYPE_MAP,
                 default=current.get(CONF_TYPE_MAP, ""),
+            ): selector.TextSelector(selector.TextSelectorConfig(multiline=True)),
+            vol.Optional(
+                CONF_DEVICE_TYPE_MAP,
+                default=current.get(CONF_DEVICE_TYPE_MAP, ""),
             ): selector.TextSelector(selector.TextSelectorConfig(multiline=True)),
         }
     )

@@ -34,7 +34,7 @@
       "settings": {
         "title": "Further settings",
         "data": {
-          "export_dir": "Export directory (relative to the Home Assistant config dir or absolute)",
+          "export_dir": "Export directory (relative to the config dir; absolute paths like /share/device_inventory_notes work too)",
           "obsidian_base": "Obsidian base path of the protocol folders (used by the dataview overviews)",
           "merge_mode": "Merge mode",
           "auto_update": "Update automatically when devices/entities change",
@@ -44,7 +44,8 @@
           "ignored_devices": "Ignored devices (device ID or name fragment, one per line)",
           "force_include": "Force include – e.g. bridges/coordinators (device ID or name fragment, one per line)",
           "only_areas": "Only areas (area name or name fragment, one per line; empty = all)",
-          "type_map": "Override type labels (format: domain: label, one per line; e.g. light: Lamp)"
+          "type_map": "Override type labels (format: domain: label, one per line; e.g. light: Lamp)",
+          "device_type_map": "Override device types (name, ID or model: label, one per line; e.g. Weihnachtsbaum: Lichterkette)"
         }
       }
     },
@@ -63,6 +64,7 @@
           "hersteller": "Manufacturer",
           "modell": "Model",
           "protokoll": "Protocol",
+          "übersicht": "Overview",
           "typ": "Type",
           "friendly_name": "Friendly Name",
           "ieee_address": "IEEE Address",
@@ -112,7 +114,7 @@
       "settings": {
         "title": "Further settings",
         "data": {
-          "export_dir": "Export directory (relative to the Home Assistant config dir or absolute)",
+          "export_dir": "Export directory (relative to the config dir; absolute paths like /share/device_inventory_notes work too)",
           "obsidian_base": "Obsidian base path of the protocol folders (used by the dataview overviews)",
           "merge_mode": "Merge mode",
           "auto_update": "Update automatically when devices/entities change",
@@ -122,7 +124,8 @@
           "ignored_devices": "Ignored devices (device ID or name fragment, one per line)",
           "force_include": "Force include – e.g. bridges/coordinators (device ID or name fragment, one per line)",
           "only_areas": "Only areas (area name or name fragment, one per line; empty = all)",
-          "type_map": "Override type labels (format: domain: label, one per line; e.g. light: Lamp)"
+          "type_map": "Override type labels (format: domain: label, one per line; e.g. light: Lamp)",
+          "device_type_map": "Override device types (name, ID or model: label, one per line; e.g. Weihnachtsbaum: Lichterkette)"
         }
       }
     },

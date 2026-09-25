@@ -12,9 +12,29 @@ eine Notiz pro Gerät, passend zum bestehenden Inventar-System der Obsidian-Vaul
   `ieee_address` + `friendly_name`).
 - Schreibt Notizen als
   `<export_dir>/<protokoll oder Bereich>/<gerätename>.md`.
+- **Graph-Anbindung**: Jede Notiz trägt ein `übersicht`-Feld mit Wikilink auf
+  ihre Protokoll-Übersicht (z. B. `übersicht: "[[01-Übersicht Zigbee]]"`),
+  damit Aktoren im Obsidian-Graphen mit ihrer Übersicht verbunden sind
+  (Dataview-Tabellen allein erzeugen keine Graph-Kanten). Die
+  Protokoll-Übersichten verlinken zurück auf `01-Übersicht Aktoren`.
+  Generator-verwaltet wie `name` (folgt Protokoll-Wechseln automatisch);
+  fehlende oder leere Werte werden ergänzt, vorhandene Werte bleiben erhalten.
+  Ein vorhandenes `typ` bleibt erhalten; ein leerer Wert kann ergänzt werden.
 - **Handfelder werden nie überschrieben**: `lagerort`, `menge`, `kaufdatum`,
-  `preis`, `gekauft_bei`, `garantie_bis`, `notiz` – ebenso `typ`
-  (nur beim ersten Anlegen vorbefüllt, danach bleibt deine Korrektur erhalten).
+  `preis`, `gekauft_bei`, `garantie_bis`, `notiz`.
+- **Metadatenkern**:
+  - `note_type: "actor"` kennzeichnet die Notiz als Aktor-Notiz. Das Feld wird
+    bei neuen Notizen gesetzt und bei älteren Notizen migriert.
+  - `entity_type` enthält, wenn eindeutig klassifizierbar, den technischen
+    Home-Assistant-Entity-Typ in Kleinschreibung, zum Beispiel `light` oder
+    `sensor`. Bei mehreren konkurrierenden Typen bleibt das Feld weg.
+  - `updated` ist das Datum `YYYY-MM-DD` der letzten fachlichen Änderung. Ein
+    unveränderter Scan, eine reine Umbenennung und die alleinige Migration
+    der Metadaten ändern das Datum nicht. Es wird nicht aus Dateisystemzeiten
+    oder dem CHANGELOG abgeleitet.
+  - `typ` bleibt das fachliche beziehungsweise Anzeigefeld und wird nicht in
+    `entity_type` umbenannt. Benutzerkorrekturen bleiben erhalten.
+  - Ein `status`-Feld wird für Aktoren vorerst nicht eingeführt.
 - `/local/device_inventory_notes.zip` ist die letzte Notizen-Generierung
   (jeder Lauf spiegelt die aktuelle Datei nach www).
 - Erkennt Umbenennungen: Wurde ein Gerät in HA umbenannt, wird die Notiz
@@ -33,10 +53,28 @@ eine Notiz pro Gerät, passend zum bestehenden Inventar-System der Obsidian-Vaul
   gewinnt immer.
 - Typ-Labels überschreiben: `domain: Label`-Zeilen (z. B. `light: Lampe`)
   überschreiben bzw. ergänzen die eingebaute Typ-Zuordnung.
+- Geräte-Typen überschreiben: `Fragment: Label`-Zeilen werden zuerst gegen die
+  exakte Geräte-ID, dann als Teiltreffer (Groß/Kleinschreibung egal) gegen
+  Gerätename und Modell geprüft – erste Trefferzeile gewinnt. So bekommen auch
+  Geräte ohne ableitbare Domains einen Typ (z. B. `Weihnachtsbaum:
+  Lichterkette` für einen Twinkly-String ohne Entities, `MFC: Drucker`,
+  `esp32-c3: BLE-Proxy`). Gilt wie die Inferenz nur für leere Typen –
+  auch bei Updates (bestehende Werte bleiben unantastbar, auch Hand-Einträge).
+
+Die eingebaute Domain-Tabelle kennt `climate`→Klima, `cover`→Rolladen,
+`fan`→Lüfter, `light`→Lampe, `lock`→Schloss, `media_player`→Lautsprecher,
+`vacuum`→Staubsauger, `camera`→Kamera, `humidifier`→Luftbefeuchter,
+`valve`→Ventil, `lawn_mower`→Mähroboter, `siren`→Sirene,
+`water_heater`→Warmwasserbereiter, `remote`→Fernbedienung und
+`switch`→Steckdose (absichtlich Letzter, weil Schalter oft nur Zweitfunktion
+sind). Rein messende Geräte fallen auf `Sensor` zurück; ohne ableitbare
+Domains bleibt das Feld leer. Reihenfolge insgesamt: Hand-Eintrag >
+Geräte-Override > Domain-Mapping > eingebaute Tabelle > Sensor > leer.
 - Änderungsprotokoll: Nach jedem Lauf wird `CHANGELOG.md` im Export-Verzeichnis
   aktualisiert (die letzten 20 Läufe), basierend auf einem Vergleich zum
   vorherigen Stand (`.din_last_state.json`). Es werden nur echte Änderungen
-  protokolliert: neu, geändert, umbenannt, entfernt.
+  protokolliert, gruppiert mit Zählern: **Neu**, **Umbenannt**, **Geändert**,
+  **Entfernt**.
 - Benachrichtigung nach dem Lauf: Wenn sich seit dem letzten Lauf wirklich
   etwas geändert hat, erscheint eine ersetzbare Benachrichtigung mit einer
   Zusammenfassung. Der erste Lauf nach der Einrichtung etabliert nur den
@@ -59,17 +97,33 @@ eine Notiz pro Gerät, passend zum bestehenden Inventar-System der Obsidian-Vaul
 
 | Option | Werte | Bedeutung |
 |---|---|---|
-| Export-Verzeichnis | relativ zu `<config>` oder absolut | Standard: `device_inventory_notes` |
+| Export-Verzeichnis | relativ zu `<config>` oder absolut (z. B. `/share/device_inventory_notes`, siehe unten) | Standard: `device_inventory_notes` |
 | Ordnerstruktur | `Ordner pro Protokoll` / `Ordner pro Bereich` | Standard: nach Protokoll (Zigbee, WiFi, …) |
 | Merge-Modus | `Vorhandene aktualisieren` / `Nur neue Notizen` | Standard: aktualisieren |
 | Automatisch aktualisieren | an/aus | Standard: an |
 | Geplanter Tageslauf | an/aus + Uhrzeit | Standard: aus – Sicherheitsnetz (fängt verpasste Änderungen auf, auch bei ausgeschaltetem Auto-Update) |
 | Benachrichtigungs-Dienst | Dienstname, z. B. `notify.mobile_app_xyz` | leer = nur HA-interne Notification; wenn gesetzt, geht bei echten Änderungen zusätzlich ein Push raus |
 | Feldauswahl | mehrere Felder wählbar | Welche HA-Felder in Notizen geschrieben werden (`name` und `ha_device_id` sind immer dabei) |
-| Ignorierte Geräte | Geräte-ID oder Namensbestandteil, eine je Zeile | Geräte werden übersprungen |
+| Ignorierte Geräte | Geräte-ID oder Namensbestandteil, eine je Zeile | Geräte werden übersprungen; ihre Notizen werden beim nächsten Lauf gelöscht (Eintrag im CHANGELOG) |
 | Trotzdem erstellen | Geräte-ID oder Namensbestandteil, eine je Zeile | erzwingt Mitnahme (überschreibt Infrastruktur- und Identitäts-Filter) |
 | Nur Bereiche | Bereichsname oder Namensbestandteil, eine je Zeile | nur Geräte in diesen Bereichen (leer = alle) |
 | Typ-Labels | `domain: Label`, eine je Zeile | überschreibt/ergänzt die eingebaute Typ-Zuordnung (z. B. `light: Lampe`) |
+| Geräte-Typen | `Name`, `ID` oder `Modell: Label`, eine je Zeile | z. B. `Weihnachtsbaum: Lichterkette`, `MFC: Drucker`, `esp32-c3: BLE-Proxy` – greift vor der Domain-Logik, befüllt nur leere Typen |
+
+## Export nach /share (z. B. für Obsidian per Samba)
+
+Statt ins Konfigurations-Verzeichnis kann der Export auch auf die HAOS-Freigabe
+`/share` geschrieben werden – dann liegen die Notizen direkt im per Samba/Netzwerk
+erreichbaren `share`-Ordner (praktisch, wenn Obsidian auf einem anderen Rechner
+läuft). Dazu als Export-Verzeichnis einfach einen absoluten Pfad eintragen:
+
+`/share/device_inventory_notes`
+
+Der www-Spiegel (`/local/…`-Links und ZIP) bleibt immer unter `<config>/www`,
+nur Notizen, CHANGELOG und Snapshot wandern nach `/share`. Beim Wechsel des
+Verzeichnisses etabliert der erste Lauf dort eine neue Baseline (kein CHANGELOG,
+keine Notification beim ersten Mal); das alte Verzeichnis wird nicht
+automatisch gelöscht.
 
 ## Befehl / Service
 
@@ -124,6 +178,9 @@ der Geräte-Identifikatoren – z. B. `shelly`, `apple_tv`, `tuya` → `WiFi`;
 
 ```yaml
 ---
+note_type: "actor"
+entity_type: "light"
+updated: "2026-09-25"
 name: "Wohnzimmer Lampe"
 typ: "Lampe"
 hersteller: "IKEA of Sweden"
@@ -146,6 +203,7 @@ notiz: ""
 
 Keine externen Abhängigkeiten; reine Python-asyncio-Integration.
 Syntax-Check: `python3 -m py_compile custom_components/device_inventory_notes/*.py`
+Tests: `python3 -m unittest discover -s tests -v`
 
 ## Lizenz
 
