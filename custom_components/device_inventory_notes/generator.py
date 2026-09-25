@@ -64,6 +64,8 @@ _CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]+")
 
 ZIGBEE2MQTT_BRIDGE = "zigbee2mqtt_bridge"
 
+MIRROR_DIRNAME = "device_inventory_notes"
+
 # The FRITZ! integration creates one device per tracked network client with a
 # generic model. Only genuine FRITZ!DECT/Fon products are DECT; tracked clients
 # (WLAN/LAN) are not DECT and must be skipped.
@@ -203,6 +205,28 @@ def _first_connection(device, conn_type: str) -> str | None:
         if ctype == conn_type and value:
             return value
     return None
+
+
+def mirror_dir(config_dir: str | Path) -> Path:
+    """Folder the www mirror is written to, and cleared before every rebuild."""
+    return Path(config_dir) / "www" / MIRROR_DIRNAME
+
+
+def mirror_conflicts_with_export(config_dir: str | Path, export_dir: str | Path) -> bool:
+    """True when the www mirror would delete the tree it copies from.
+
+    The mirror is rebuilt by removing <config>/www/device_inventory_notes
+    first. An export directory that is that folder, or a subfolder of it,
+    would be destroyed by its own mirror, so the caller has to skip the
+    mirror instead. Relative export directories are resolved against the
+    config dir, the same way DeviceNoteGenerator.export_root does.
+    """
+    root = Path(export_dir)
+    if not root.is_absolute():
+        root = Path(config_dir) / root
+    www_resolved = mirror_dir(config_dir).resolve()
+    root_resolved = root.resolve()
+    return root_resolved == www_resolved or root_resolved.is_relative_to(www_resolved)
 
 
 def _is_fritz_dect_device(dev, domain: str | None = None) -> bool:
@@ -1231,10 +1255,20 @@ class DeviceNoteGenerator:
 
         Skipped when the tree did not change since the last run (the mirror
         already matches); always rebuilt when the mirror dir or zip is
-        missing.
+        missing. Refused when the export directory is the mirror target or
+        lives inside it, because the rmtree below would delete the notes it
+        is supposed to copy.
         """
-        www_dir = Path(self.hass.config.config_dir) / "www" / "device_inventory_notes"
-        zip_path = Path(self.hass.config.config_dir) / "www" / "device_inventory_notes.zip"
+        www_dir = mirror_dir(self.hass.config.config_dir)
+        zip_path = www_dir.with_name(f"{MIRROR_DIRNAME}.zip")
+        if mirror_conflicts_with_export(self.hass.config.config_dir, root):
+            message = (
+                f"Export-Verzeichnis {root} liegt im Mirror-Ziel {www_dir} – "
+                "Mirror und ZIP werden übersprungen, damit die Notizen erhalten bleiben"
+            )
+            _LOGGER.error(message)
+            report.errors.append(message)
+            return "", ""
         if (
             not self._tree_changed(report)
             and www_dir.is_dir()

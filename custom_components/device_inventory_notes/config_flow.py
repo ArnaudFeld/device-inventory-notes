@@ -55,7 +55,7 @@ from .const import (
     SELECTABLE_FIELDS,
     SERVICE_DOMAINS,
 )
-from .generator import device_display_name
+from .generator import device_display_name, mirror_conflicts_with_export
 
 def _placeholder_links(language: str) -> dict[str, str]:
     """Fertige Anker für die Flow-Beschreibung (ICU erlaubt kein HTML im Template)."""
@@ -310,6 +310,18 @@ def _schema_settings(current: dict) -> vol.Schema:
     )
 
 
+def _settings_errors(hass, user_input: dict) -> dict[str, str]:
+    """Reject an export directory the www mirror would delete.
+
+    The mirror is rebuilt by clearing <config>/www/device_inventory_notes, so
+    exporting there (or below it) would make the run destroy its own notes.
+    """
+    export_dir = (user_input or {}).get(CONF_EXPORT_DIR)
+    if export_dir and mirror_conflicts_with_export(hass.config.config_dir, export_dir):
+        return {"base": "export_dir_in_www"}
+    return {}
+
+
 class DeviceInventoryNotesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Device Inventory Notes."""
 
@@ -358,6 +370,13 @@ class DeviceInventoryNotesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_settings(self, user_input=None):
         if user_input is not None:
+            errors = _settings_errors(self.hass, user_input)
+            if errors:
+                return self.async_show_form(
+                    step_id="settings",
+                    data_schema=_schema_settings(self._flow_data),
+                    errors=errors,
+                )
             self._flow_data.update(user_input)
             return self.async_create_entry(title="Device Inventory Notes", data=self._flow_data)
         return self.async_show_form(
@@ -427,6 +446,13 @@ class DeviceInventoryNotesOptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_settings(self, user_input=None):
         if user_input is not None:
+            errors = _settings_errors(self.hass, user_input)
+            if errors:
+                return self.async_show_form(
+                    step_id="settings",
+                    data_schema=_schema_settings(self._flow_data),
+                    errors=errors,
+                )
             self._flow_data.update(user_input)
             self.hass.async_create_task(
                 self._notify_scan_after_options()

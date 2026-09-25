@@ -550,5 +550,105 @@ class DeprecatedApiTests(unittest.TestCase):
         generator_module.DeviceNoteGenerator._resolve_protocol(device, {})
 
 
+class MirrorTests(unittest.TestCase):
+    """_mirror_to_www must never delete the tree it mirrors from."""
+
+    def _generator(self, config_dir: Path):
+        generator = object.__new__(DeviceNoteGenerator)
+        generator.hass = SimpleNamespace(
+            config=SimpleNamespace(config_dir=str(config_dir))
+        )
+        return generator
+
+    def _seed(self, root: Path) -> Path:
+        note = root / "Zigbee" / "Actor.md"
+        note.parent.mkdir(parents=True, exist_ok=True)
+        note.write_text('---\nname: "Actor"\n---\n', encoding="utf-8")
+        return note
+
+    def test_mirror_refuses_to_delete_the_export_tree(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config_dir = Path(directory)
+            root = config_dir / "www" / "device_inventory_notes"
+            note = self._seed(root)
+            report = generator_module.GenerateReport(created=[str(note)])
+
+            self._generator(config_dir)._mirror_to_www(root, report)
+
+            self.assertTrue(note.exists(), "Export-Verzeichnis wurde gelöscht")
+            self.assertTrue(report.errors)
+
+    def test_mirror_refuses_to_delete_a_nested_export_tree(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config_dir = Path(directory)
+            root = config_dir / "www" / "device_inventory_notes" / "export"
+            note = self._seed(root)
+            report = generator_module.GenerateReport(created=[str(note)])
+
+            self._generator(config_dir)._mirror_to_www(root, report)
+
+            self.assertTrue(note.exists(), "Export-Verzeichnis wurde gelöscht")
+            self.assertTrue(report.errors)
+
+    def test_mirror_copies_notes_and_zip(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config_dir = Path(directory)
+            root = config_dir / "export"
+            note = self._seed(root)
+            report = generator_module.GenerateReport(created=[str(note)])
+
+            zip_url, dir_url = self._generator(config_dir)._mirror_to_www(root, report)
+
+            self.assertEqual(zip_url, "/local/device_inventory_notes.zip")
+            self.assertEqual(dir_url, "/local/device_inventory_notes/")
+            mirrored = config_dir / "www" / "device_inventory_notes" / "Zigbee" / "Actor.md"
+            self.assertTrue(mirrored.exists())
+            self.assertEqual(report.errors, [])
+
+
+class MirrorConflictTests(unittest.TestCase):
+    """mirror_conflicts_with_export is the check shared by generator and flow."""
+
+    def test_identical_paths_conflict(self):
+        self.assertTrue(
+            generator_module.mirror_conflicts_with_export(
+                "/config", Path("/config/www/device_inventory_notes")
+            )
+        )
+
+    def test_nested_path_conflicts(self):
+        self.assertTrue(
+            generator_module.mirror_conflicts_with_export(
+                "/config", Path("/config/www/device_inventory_notes/export")
+            )
+        )
+
+    def test_sibling_path_does_not_conflict(self):
+        self.assertFalse(
+            generator_module.mirror_conflicts_with_export(
+                "/config", Path("/config/www/device_inventory_notes_export")
+            )
+        )
+
+    def test_external_path_does_not_conflict(self):
+        self.assertFalse(
+            generator_module.mirror_conflicts_with_export(
+                "/config", Path("/share/device_inventory_notes")
+            )
+        )
+
+    def test_relative_export_dir_is_resolved_against_the_config_dir(self):
+        self.assertFalse(
+            generator_module.mirror_conflicts_with_export(
+                "/config", Path("device_inventory_notes")
+            )
+        )
+        self.assertTrue(
+            generator_module.mirror_conflicts_with_export(
+                "/config", Path("www/device_inventory_notes")
+            )
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

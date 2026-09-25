@@ -50,7 +50,8 @@
       }
     },
     "error": {
-      "cannot_connect": "Verbindung fehlgeschlagen"
+      "cannot_connect": "Verbindung fehlgeschlagen",
+      "export_dir_in_www": "Das Export-Verzeichnis liegt im Mirror-Ziel unter www. Dort würde der Export seine eigenen Notizen löschen. Bitte einen anderen Pfad wählen, zum Beispiel /share/device_inventory_notes."
     }
   },
   "options": {
@@ -130,7 +131,8 @@
       }
     },
     "error": {
-      "cannot_connect": "Verbindung fehlgeschlagen"
+      "cannot_connect": "Verbindung fehlgeschlagen",
+      "export_dir_in_www": "Das Export-Verzeichnis liegt im Mirror-Ziel unter www. Dort würde der Export seine eigenen Notizen löschen. Bitte einen anderen Pfad wählen, zum Beispiel /share/device_inventory_notes."
     }
   },
   "services": {
