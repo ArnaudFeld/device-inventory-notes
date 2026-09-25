@@ -1310,11 +1310,11 @@ class DeviceNoteGenerator:
         known_device_ids: set[str],
         known_ieees: set[str],
     ) -> list[str]:
-        """Delete notes whose registry id/ieee matches no known device.
+        """Delete notes whose registry id and ieee both match no known device.
 
-        Called after the main loop (non dry-run only) with the pre-loop
-        identity index. Returns the list of deleted paths and records them
-        in report.removed_stale.
+        Called after the main loop (non dry-run only) with the identity index,
+        which reindex_renamed_notes has already brought up to date. Returns the
+        list of deleted paths and records them in report.removed_stale.
         """
         deleted: list[str] = []
         for rel in self._orphan_paths(notes, known_device_ids, known_ieees):
