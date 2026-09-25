@@ -46,7 +46,6 @@ from .const import (
     LAYOUT_AREA,
     LAYOUT_PROTOCOL,
     MERGE_MODE_CREATE_ONLY,
-    SERVICE_SCAN,
     MERGE_MODE_MERGE,
     OVERVIEW_ROOT_FILENAME,
     PROTOCOL_MAP,
@@ -449,43 +448,12 @@ class DeviceInventoryNotesOptionsFlow(config_entries.OptionsFlow):
                     data_schema=_schema_settings(self._flow_data),
                     errors=errors,
                 )
+            # No notification here: Home Assistant calls async_update_options
+            # after this returns, and that already tells the user to run the
+            # scan. A second copy used to arrive with the same notification_id.
             self._flow_data.update(user_input)
-            self.hass.async_create_task(
-                self._notify_scan_after_options()
-            )
             return self.async_create_entry(title="", data=self._flow_data)
         return self.async_show_form(
             step_id="settings",
             data_schema=_schema_settings(self._flow_data),
-        )
-
-    async def _notify_scan_after_options(self) -> None:
-        """Tell the user to run the scan service after an options change.
-
-        Options changes do not trigger a regeneration, so the notes stay
-        stale until the service is called (or a registry event fires).
-        """
-        service_name = f"{DOMAIN}.{SERVICE_SCAN}"
-        if self.hass.config.language == "de":
-            message = (
-                "Die Einstellungen wurden gespeichert. Bitte führe jetzt den Dienst "
-                f'<a href="/config/tools/action?service={service_name}">'
-                f"device_inventory_notes.scan_and_generate</a> aus, "
-                "damit die Notizen mit den neuen Einstellungen aktualisiert werden."
-            )
-        else:
-            message = (
-                "The settings were saved. Please run the service "
-                f'<a href="/config/tools/action?service={service_name}">'
-                f"device_inventory_notes.scan_and_generate</a> now, "
-                "so the notes are regenerated with the new settings."
-            )
-        await self.hass.services.async_call(
-            "persistent_notification",
-            "create",
-            {
-                "notification_id": f"{DOMAIN}_options_changed",
-                "title": "Device Inventory Notes",
-                "message": message,
-            },
         )

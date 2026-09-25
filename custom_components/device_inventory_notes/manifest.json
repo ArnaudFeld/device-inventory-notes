@@ -8,5 +8,6 @@
   "requirements": [],
   "codeowners": ["@ArnaudFeld"],
   "iot_class": "local_polling",
-  "integration_type": "service"
+  "integration_type": "service",
+  "single_config_entry": true
 }

@@ -62,6 +62,7 @@ class DeviceInventoryRuntime:
         self._debounce: asyncio.TimerHandle | None = None
         self._remove_listeners: list[Callable[[], None]] = []
         self._remove_schedule: Callable[[], None] | None = None
+        self._initial_task: asyncio.Task | None = None
 
     def _current_entry(self) -> ConfigEntry:
         """Return the fresh entry so options changes are always picked up."""
@@ -367,6 +368,11 @@ class DeviceInventoryRuntime:
 
     @callback
     def shutdown(self) -> None:
+        if self._initial_task is not None:
+            # The delayed start-up run sleeps before it does anything; without
+            # cancelling it, a reload leaves the old runtime writing notes.
+            self._initial_task.cancel()
+            self._initial_task = None
         if self._debounce is not None:
             self._debounce.cancel()
         if self._remove_schedule is not None:
@@ -406,14 +412,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             await asyncio.sleep(INITIAL_RUN_DELAY)
             await runtime.run()
 
-        task = hass.async_create_task(_initial_run())
-        task.add_done_callback(runtime._on_run_done)
+        runtime._initial_task = hass.async_create_task(_initial_run())
+        runtime._initial_task.add_done_callback(runtime._on_run_done)
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload the integration."""
-    runtime: DeviceInventoryRuntime = hass.data[DOMAIN].pop(entry.entry_id)
+    runtime: DeviceInventoryRuntime | None = hass.data.get(DOMAIN, {}).pop(
+        entry.entry_id, None
+    )
+    if runtime is None:
+        # Setup failed before the runtime was registered, or it is already gone.
+        return True
     runtime.shutdown()
     hass.services.async_remove(DOMAIN, SERVICE_SCAN)
     return True
@@ -427,7 +438,11 @@ async def async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
     without a restart. A notification reminds the user to run the scan
     service, since options changes do not trigger a regeneration.
     """
-    runtime: DeviceInventoryRuntime = hass.data[DOMAIN][entry.entry_id]
+    runtime: DeviceInventoryRuntime | None = hass.data.get(DOMAIN, {}).get(
+        entry.entry_id
+    )
+    if runtime is None:
+        return
     runtime.reload_options()
     runtime.setup_schedule()
     service_name = f"{DOMAIN}.{SERVICE_SCAN}"
