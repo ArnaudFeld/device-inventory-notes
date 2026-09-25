@@ -278,6 +278,24 @@ def _first_connection(device, conn_type: str) -> str | None:
     return None
 
 
+def reindex_renamed_notes(
+    note_index: dict[str, dict], renamed: list, root: Path
+) -> None:
+    """Move index entries along with the notes a run relocated.
+
+    The index is built before the device loop, so after a rename it still lists
+    the old path. Feeding that stale index to the orphan pass turns every
+    rename into a FileNotFoundError. A rename keeps the note's identity, so the
+    entry moves with the file.
+    """
+    for old_path, new_path in renamed:
+        old_rel = str(Path(old_path).relative_to(root))
+        new_rel = str(Path(new_path).relative_to(root))
+        info = note_index.pop(old_rel, None)
+        if info is not None:
+            note_index[new_rel] = info
+
+
 def mirror_dir(config_dir: str | Path) -> Path:
     """Folder the www mirror is written to, and cleared before every rebuild."""
     return Path(config_dir) / "www" / MIRROR_DIRNAME
@@ -583,6 +601,9 @@ class DeviceNoteGenerator:
                     )
                 ]
             else:
+                # The index predates the loop, so let it follow the renames
+                # first; otherwise the orphan pass works on stale paths.
+                reindex_renamed_notes(note_index, report.renamed, root)
                 report.orphaned = await asyncio.to_thread(
                     self._delete_orphans,
                     root,
@@ -919,18 +940,22 @@ class DeviceNoteGenerator:
     def _orphan_paths(
         notes: dict[str, dict], known_device_ids: set[str], known_ieees: set[str]
     ) -> list[str]:
-        """Relpaths whose registry id/ieee matches no known device. Pure filter."""
+        """Relpaths whose registry id and ieee both match no known device.
+
+        Pure filter. A note is kept when either identity resolves, so a device
+        that was re-created under a new id but kept its ieee address does not
+        take its note down with it. Notes carrying no identity at all are
+        hand-written and are never touched.
+        """
         orphans: list[str] = []
         for rel, info in notes.items():
             device_id = info.get("device_id")
             ieee = info.get("ieee")
-            if device_id:
-                if device_id in known_device_ids:
-                    continue
-            elif ieee:
-                if ieee in known_ieees:
-                    continue
-            else:
+            if not device_id and not ieee:
+                continue
+            if device_id and device_id in known_device_ids:
+                continue
+            if ieee and ieee in known_ieees:
                 continue
             orphans.append(rel)
         return orphans
@@ -1297,10 +1322,15 @@ class DeviceNoteGenerator:
             path = root / rel
             try:
                 path.unlink()
-                deleted.append(str(path))
-                report.removed_stale.append(str(path))
+            except FileNotFoundError:
+                # Already gone, e.g. because a rename moved it earlier in this
+                # run. Not an error: the wanted state is reached either way.
+                continue
             except OSError as exc:
                 report.errors.append(f"{path.name}: {exc}")
+                continue
+            deleted.append(str(path))
+            report.removed_stale.append(str(path))
         return deleted
 
     @staticmethod

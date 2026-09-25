@@ -1,3 +1,4 @@
+import hashlib
 import importlib
 import sys
 import tempfile
@@ -57,6 +58,7 @@ MERGE_MODE_MERGE = const_module.MERGE_MODE_MERGE
 CONF_FIELDS = const_module.CONF_FIELDS
 CONF_FIELD_ORDER = const_module.CONF_FIELD_ORDER
 SELECTABLE_FIELDS = const_module.SELECTABLE_FIELDS
+OVERVIEW_ROOT_FILENAME = const_module.OVERVIEW_ROOT_FILENAME
 parse_note = generator_module.parse_note
 serialize_note = generator_module.serialize_note
 
@@ -447,14 +449,34 @@ class DeviceNoteGeneratorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             generator = self._generator(root)
-            generator._write_overviews(root)
+            index = generator._write_overviews(root)
 
+            self.assertTrue(index.exists(), "Übersicht wurde nicht geschrieben")
+            self.assertEqual(index.name, OVERVIEW_ROOT_FILENAME)
             for path in root.rglob("*.md"):
                 text = path.read_text(encoding="utf-8")
                 self.assertNotIn("note_type:", text)
                 self.assertNotIn("entity_type:", text)
                 self.assertNotIn("updated:", text)
                 self.assertNotIn("status:", text)
+
+    def test_overviews_are_written_for_every_protocol_even_when_empty(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            generator = self._generator(root)
+
+            generator._write_overviews(root)
+
+            expected = {
+                root / OVERVIEW_ROOT_FILENAME,
+                *(
+                    root / proto / f"01-Übersicht {proto}.md"
+                    for proto in const_module.OVERVIEW_PROTOCOLS
+                ),
+            }
+            self.assertEqual(set(root.rglob("*.md")), expected)
+            for path in expected:
+                self.assertIn("```dataview", path.read_text(encoding="utf-8"))
 
     def test_resolve_protocol_uses_the_config_entry_id(self):
         device = self._device(config_entry_id="entry-zha")
@@ -576,7 +598,8 @@ class MirrorTests(unittest.TestCase):
             note = self._seed(root)
             report = generator_module.GenerateReport(created=[str(note)])
 
-            self._generator(config_dir)._mirror_to_www(root, report)
+            with self.assertLogs(generator_module._LOGGER, level="ERROR"):
+                self._generator(config_dir)._mirror_to_www(root, report)
 
             self.assertTrue(note.exists(), "Export-Verzeichnis wurde gelöscht")
             self.assertTrue(report.errors)
@@ -588,7 +611,8 @@ class MirrorTests(unittest.TestCase):
             note = self._seed(root)
             report = generator_module.GenerateReport(created=[str(note)])
 
-            self._generator(config_dir)._mirror_to_www(root, report)
+            with self.assertLogs(generator_module._LOGGER, level="ERROR"):
+                self._generator(config_dir)._mirror_to_www(root, report)
 
             self.assertTrue(note.exists(), "Export-Verzeichnis wurde gelöscht")
             self.assertTrue(report.errors)
@@ -756,6 +780,222 @@ class FieldSelectionTests(unittest.TestCase):
         self.assertIn("sonderfeld", options)
         self.assertEqual(len(options), len(SELECTABLE_FIELDS) + 1)
         self.assertEqual(len(set(options)), len(options))
+
+
+class OrphanTests(unittest.TestCase):
+    """A note is only deleted when neither its device id nor its ieee is known."""
+
+    def _orphan(self, notes, known_ids=frozenset(), known_ieees=frozenset()):
+        return generator_module.DeviceNoteGenerator._orphan_paths(
+            notes, set(known_ids), set(known_ieees)
+        )
+
+    def test_note_of_a_known_device_is_kept(self):
+        notes = {"Zigbee/A.md": {"device_id": "d1", "ieee": ""}}
+
+        self.assertEqual(self._orphan(notes, {"d1"}), [])
+
+    def test_note_without_any_identity_is_kept(self):
+        notes = {"Notizen/hand.md": {"device_id": "", "ieee": ""}}
+
+        self.assertEqual(self._orphan(notes, {"d1"}), [])
+
+    def test_note_with_unknown_device_id_and_known_ieee_is_kept(self):
+        notes = {"Zigbee/A.md": {"device_id": "old-id", "ieee": "00:11"}}
+
+        self.assertEqual(self._orphan(notes, {"d1"}, {"00:11"}), [])
+
+    def test_note_with_only_a_known_ieee_is_kept(self):
+        notes = {"Zigbee/A.md": {"device_id": "", "ieee": "00:11"}}
+
+        self.assertEqual(self._orphan(notes, {"d1"}, {"00:11"}), [])
+
+    def test_note_with_unknown_device_id_and_unknown_ieee_is_deleted(self):
+        notes = {"Zigbee/A.md": {"device_id": "gone", "ieee": "00:11"}}
+
+        self.assertEqual(self._orphan(notes, {"d1"}, {"00:22"}), ["Zigbee/A.md"])
+
+    def test_note_with_unknown_ieee_only_is_deleted(self):
+        notes = {"Zigbee/A.md": {"device_id": "", "ieee": "00:11"}}
+
+        self.assertEqual(self._orphan(notes, {"d1"}, {"00:22"}), ["Zigbee/A.md"])
+
+    def test_delete_does_not_report_an_already_missing_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report = generator_module.GenerateReport()
+            notes = {"Zigbee/A.md": {"device_id": "gone", "ieee": ""}}
+
+            deleted = generator_module.DeviceNoteGenerator._delete_orphans(
+                object.__new__(DeviceNoteGenerator), root, report, notes, set(), set()
+            )
+
+            self.assertEqual(deleted, [])
+            self.assertEqual(report.errors, [])
+
+    def test_delete_removes_a_real_orphan(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            note = root / "Zigbee" / "A.md"
+            note.parent.mkdir(parents=True)
+            note.write_text("---\nname: \"A\"\n---\n", encoding="utf-8")
+            report = generator_module.GenerateReport()
+            notes = {"Zigbee/A.md": {"device_id": "gone", "ieee": ""}}
+
+            deleted = generator_module.DeviceNoteGenerator._delete_orphans(
+                object.__new__(DeviceNoteGenerator), root, report, notes, set(), set()
+            )
+
+            self.assertFalse(note.exists())
+            self.assertEqual(deleted, [str(note)])
+            self.assertEqual(report.removed_stale, [str(note)])
+
+    def test_renames_move_the_index_entry_with_the_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            notes = {"Zigbee/Old.md": {"device_id": "d1", "ieee": "00:11"}}
+            renamed = [
+                (str(root / "Zigbee" / "Old.md"), str(root / "Zigbee" / "New.md"))
+            ]
+
+            generator_module.reindex_renamed_notes(notes, renamed, root)
+
+            self.assertEqual(
+                notes, {"Zigbee/New.md": {"device_id": "d1", "ieee": "00:11"}}
+            )
+
+    def test_renames_keep_a_stale_index_usable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            notes = {"Zigbee/Old.md": {"device_id": "d1", "ieee": ""}}
+            renamed = [
+                (str(root / "Zigbee" / "Old.md"), str(root / "Zigbee" / "New.md"))
+            ]
+
+            generator_module.reindex_renamed_notes(notes, renamed, root)
+
+            self.assertNotIn("Zigbee/Old.md", notes)
+
+
+class ChangelogTests(unittest.TestCase):
+    """The snapshot diff and the changelog it feeds."""
+
+    def _generator(self):
+        return object.__new__(DeviceNoteGenerator)
+
+    def _note(self, root: Path, rel: str, body: str = "") -> Path:
+        path = root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f'---\nname: "Actor"\n---\n{body}', encoding="utf-8")
+        return path
+
+    def _state(self, path: Path, name: str, body: str, ieee: str = "") -> Path:
+        self._note(path, name, body)
+        return {
+            name: {
+                "device_id": "d1",
+                "ieee": ieee,
+                "hash": hashlib.sha256(
+                    f'---\nname: "Actor"\n---\n{body}'.encode()
+                ).hexdigest(),
+                "body": body,
+            }
+        }
+
+    def test_diff_reports_created_updated_and_removed(self):
+        old = {"a.md": {"device_id": "d1", "ieee": "", "hash": "1"},
+               "b.md": {"device_id": "d2", "ieee": "", "hash": "2"}}
+        new = {"a.md": {"device_id": "d1", "ieee": "", "hash": "9"},
+               "c.md": {"device_id": "d3", "ieee": "", "hash": "3"}}
+
+        created, updated, renamed, removed = generator_module.DeviceNoteGenerator._diff_states(old, new)
+
+        self.assertEqual(created, ["c.md"])
+        self.assertEqual(updated, ["a.md"])
+        self.assertEqual(renamed, [])
+        self.assertEqual(removed, ["b.md"])
+
+    def test_diff_detects_a_rename_by_device_id(self):
+        old = {"Zigbee/Old.md": {"device_id": "d1", "ieee": "", "hash": "1"}}
+        new = {"Zigbee/New.md": {"device_id": "d1", "ieee": "", "hash": "1"}}
+
+        created, updated, renamed, removed = generator_module.DeviceNoteGenerator._diff_states(old, new)
+
+        self.assertEqual(renamed, [("Zigbee/Old.md", "Zigbee/New.md")])
+        self.assertEqual((created, updated, removed), ([], [], []))
+
+    def test_diff_detects_a_rename_by_ieee_when_the_device_id_changed(self):
+        old = {"Zigbee/Old.md": {"device_id": "", "ieee": "00:11", "hash": "1"}}
+        new = {"Zigbee/New.md": {"device_id": "", "ieee": "00:11", "hash": "1"}}
+
+        _created, _updated, renamed, _removed = generator_module.DeviceNoteGenerator._diff_states(old, new)
+
+        self.assertEqual(renamed, [("Zigbee/Old.md", "Zigbee/New.md")])
+
+    def test_a_note_without_identity_is_not_reported_as_changed(self):
+        entry = {"device_id": "", "ieee": "", "hash": "1"}
+        old = {"hand.md": dict(entry)}
+        new = {"hand.md": dict(entry)}
+
+        result = generator_module.DeviceNoteGenerator._diff_states(old, new)
+
+        self.assertEqual(result, ([], [], [], []))
+
+    def test_first_run_writes_a_baseline_without_a_changelog_entry(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._note(root, "Zigbee/A.md")
+            report = generator_module.GenerateReport()
+
+            self._generator()._write_changelog(root, report)
+
+            self.assertTrue((root / const_module.CHANGELOG_FILENAME).exists() is False)
+            self.assertEqual(
+                list(generator_module.DeviceNoteGenerator._load_last_state(
+                    self._generator(), root
+                )),
+                ["Zigbee/A.md"],
+            )
+            self.assertEqual(report.changed_created, [])
+
+    def test_a_changed_note_is_reported_in_the_changelog(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._generator()._save_last_state(
+                root, self._state(root, "Zigbee/A.md", "alt")
+            )
+            self._note(root, "Zigbee/A.md", "neu")
+            report = generator_module.GenerateReport()
+
+            self._generator()._write_changelog(root, report)
+
+            self.assertEqual(report.changed_updated, ["Zigbee/A.md"])
+            self.assertIn("Geändert (1)", (root / const_module.CHANGELOG_FILENAME).read_text(encoding="utf-8"))
+
+    def test_an_unchanged_tree_writes_no_changelog_entry(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            body = "gleich"
+            self._generator()._save_last_state(
+                root, self._state(root, "Zigbee/A.md", body)
+            )
+            report = generator_module.GenerateReport()
+
+            self._generator()._write_changelog(root, report)
+
+            self.assertFalse((root / const_module.CHANGELOG_FILENAME).exists())
+            self.assertEqual(report.changed_updated, [])
+
+    def test_overviews_and_the_changelog_itself_are_not_snapshotted(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._note(root, "Zigbee/A.md")
+            self._note(root, const_module.OVERVIEW_ROOT_FILENAME)
+            self._note(root, const_module.CHANGELOG_FILENAME)
+
+            snapshot = self._generator()._snapshot_notes(root)
+
+            self.assertEqual(list(snapshot), ["Zigbee/A.md"])
 
 
 if __name__ == "__main__":
