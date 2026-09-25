@@ -1390,6 +1390,8 @@ class DeviceNoteGenerator:
 
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
             for path in sorted(root.rglob("*.md")):
+                if path.name == LEGACY_INDEX_FILENAME:
+                    continue
                 zf.write(path, path.relative_to(root))
 
         return "/local/device_inventory_notes.zip", "/local/device_inventory_notes/"

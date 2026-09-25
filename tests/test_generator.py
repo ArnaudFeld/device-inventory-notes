@@ -3,6 +3,7 @@ import importlib
 import sys
 import tempfile
 import types
+import zipfile
 import unittest
 from datetime import datetime as DateTime
 from pathlib import Path
@@ -59,6 +60,8 @@ CONF_FIELDS = const_module.CONF_FIELDS
 CONF_FIELD_ORDER = const_module.CONF_FIELD_ORDER
 SELECTABLE_FIELDS = const_module.SELECTABLE_FIELDS
 OVERVIEW_ROOT_FILENAME = const_module.OVERVIEW_ROOT_FILENAME
+LEGACY_INDEX_FILENAME = const_module.LEGACY_INDEX_FILENAME
+MIRROR_DIRNAME = generator_module.MIRROR_DIRNAME
 parse_note = generator_module.parse_note
 serialize_note = generator_module.serialize_note
 
@@ -631,6 +634,28 @@ class MirrorTests(unittest.TestCase):
             mirrored = config_dir / "www" / "device_inventory_notes" / "Zigbee" / "Actor.md"
             self.assertTrue(mirrored.exists())
             self.assertEqual(report.errors, [])
+
+    def test_zip_and_folder_contain_the_same_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config_dir = Path(directory)
+            root = config_dir / "export"
+            self._seed(root)
+            legacy = root / LEGACY_INDEX_FILENAME
+            legacy.write_text("alter Index", encoding="utf-8")
+            report = generator_module.GenerateReport(created=[str(legacy)])
+
+            self._generator(config_dir)._mirror_to_www(root, report)
+
+            mirrored = config_dir / "www" / MIRROR_DIRNAME
+            in_folder = {
+                str(path.relative_to(mirrored)) for path in mirrored.rglob("*.md")
+            }
+            with zipfile.ZipFile(
+                config_dir / "www" / f"{MIRROR_DIRNAME}.zip"
+            ) as archive:
+                in_zip = set(archive.namelist())
+            self.assertEqual(in_zip, in_folder)
+            self.assertNotIn(LEGACY_INDEX_FILENAME, in_zip)
 
 
 class MirrorConflictTests(unittest.TestCase):

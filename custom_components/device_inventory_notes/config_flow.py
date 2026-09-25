@@ -80,54 +80,63 @@ def _placeholder_links(language: str) -> dict[str, str]:
 
 def _schema_layout(current: dict) -> vol.Schema:
     """First step: folder layout."""
-    return vol.Schema(
-        {
-            vol.Required(
-                CONF_LAYOUT, default=current.get(CONF_LAYOUT, DEFAULT_LAYOUT)
-            ): selector.SelectSelector(
-                {
-                    "options": [
-                        selector.SelectOptionDict(value=LAYOUT_PROTOCOL, label="Ordner pro Protokoll"),
-                        selector.SelectOptionDict(value=LAYOUT_AREA, label="Ordner pro Bereich"),
-                    ]
-                }
-            ),
-        }
+    return vol.All(
+        vol.Schema(
+            {
+                vol.Required(
+                    CONF_LAYOUT, default=current.get(CONF_LAYOUT, DEFAULT_LAYOUT)
+                ): selector.SelectSelector(
+                    {
+                        "options": [
+                            selector.SelectOptionDict(value=LAYOUT_PROTOCOL, label="Ordner pro Protokoll"),
+                            selector.SelectOptionDict(value=LAYOUT_AREA, label="Ordner pro Bereich"),
+                        ]
+                    }
+                ),
+            }
+        ),
+        extra=vol.PREVENT_EXTRA,
     )
 
 
 def _schema_fields(current: dict) -> vol.Schema:
     """Second step: selectable fields (including hand-maintained ones)."""
-    return vol.Schema(
-        {
-            vol.Optional(
-                CONF_FIELDS,
-                default=current.get(CONF_FIELDS) or list(DEFAULT_FIELDS),
-            ): selector.SelectSelector(
-                selector.SelectSelectorConfig(
-                    multiple=True,
-                    mode=selector.SelectSelectorMode.LIST,
-                    options=[
-                        selector.SelectOptionDict(value=field, label=field)
-                        for field in selectable_field_options(current.get(CONF_FIELDS))
-                    ],
-                )
-            ),
-        }
+    return vol.All(
+        vol.Schema(
+            {
+                vol.Optional(
+                    CONF_FIELDS,
+                    default=current.get(CONF_FIELDS) or list(DEFAULT_FIELDS),
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        multiple=True,
+                        mode=selector.SelectSelectorMode.LIST,
+                        options=[
+                            selector.SelectOptionDict(value=field, label=field)
+                            for field in selectable_field_options(current.get(CONF_FIELDS))
+                        ],
+                    )
+                ),
+            }
+        ),
+        extra=vol.PREVENT_EXTRA,
     )
 
 
 def _schema_order(current: dict) -> vol.Schema:
     """Order step: multiline text field, one field per line, line order = note order."""
-    return vol.Schema(
-        {
-            vol.Optional(
-                CONF_FIELD_ORDER,
-                default=order_prefill(current),
-            ): selector.TextSelector(
-                selector.TextSelectorConfig(multiline=True)
-            ),
-        }
+    return vol.All(
+        vol.Schema(
+            {
+                vol.Optional(
+                    CONF_FIELD_ORDER,
+                    default=order_prefill(current),
+                ): selector.TextSelector(
+                    selector.TextSelectorConfig(multiline=True)
+                ),
+            }
+        ),
+        extra=vol.PREVENT_EXTRA,
     )
 
 
@@ -224,68 +233,71 @@ def _schema_extra(current: dict, candidates: dict[str, int]) -> vol.Schema:
             }
         )
     )
-    return vol.Schema(schema)
+    return vol.All(vol.Schema(schema), extra=vol.PREVENT_EXTRA)
 
 
 def _schema_settings(current: dict) -> vol.Schema:
     """Third step: everything else."""
-    return vol.Schema(
-        {
-            vol.Required(
-                CONF_EXPORT_DIR, default=current.get(CONF_EXPORT_DIR, DEFAULT_EXPORT_DIR)
-            ): selector.TextSelector(),
-            vol.Required(
-                CONF_OBSIDIAN_BASE,
-                default=current.get(CONF_OBSIDIAN_BASE, DEFAULT_OBSIDIAN_BASE),
-            ): selector.TextSelector(),
-            vol.Required(
-                CONF_MERGE_MODE, default=current.get(CONF_MERGE_MODE, DEFAULT_MERGE_MODE)
-            ): selector.SelectSelector(
-                {
-                    "options": [
-                        selector.SelectOptionDict(
-                            value=MERGE_MODE_MERGE, label="Vorhandene aktualisieren (handgepflegte Felder behalten)"
-                        ),
-                        selector.SelectOptionDict(value=MERGE_MODE_CREATE_ONLY, label="Nur neue Notizen anlegen"),
-                    ]
-                }
-            ),
-            vol.Required(
-                CONF_AUTO_UPDATE, default=current.get(CONF_AUTO_UPDATE, DEFAULT_AUTO_UPDATE)
-            ): selector.BooleanSelector(),
-            vol.Optional(
-                CONF_SCHEDULE_ENABLED,
-                default=current.get(CONF_SCHEDULE_ENABLED, DEFAULT_SCHEDULE_ENABLED),
-            ): selector.BooleanSelector(),
-            vol.Optional(
-                CONF_SCHEDULE_TIME,
-                default=current.get(CONF_SCHEDULE_TIME, DEFAULT_SCHEDULE_TIME),
-            ): selector.TimeSelector(),
-            vol.Optional(
-                CONF_NOTIFY_SERVICE,
-                default=current.get(CONF_NOTIFY_SERVICE, DEFAULT_NOTIFY_SERVICE),
-            ): selector.TextSelector(),
-            vol.Optional(
-                CONF_IGNORED_DEVICES,
-                default=current.get(CONF_IGNORED_DEVICES, ""),
-            ): selector.TextSelector(selector.TextSelectorConfig(multiline=True)),
-            vol.Optional(
-                CONF_FORCE_INCLUDE,
-                default=current.get(CONF_FORCE_INCLUDE, ""),
-            ): selector.TextSelector(selector.TextSelectorConfig(multiline=True)),
-            vol.Optional(
-                CONF_ONLY_AREAS,
-                default=current.get(CONF_ONLY_AREAS, ""),
-            ): selector.TextSelector(selector.TextSelectorConfig(multiline=True)),
-            vol.Optional(
-                CONF_TYPE_MAP,
-                default=current.get(CONF_TYPE_MAP, ""),
-            ): selector.TextSelector(selector.TextSelectorConfig(multiline=True)),
-            vol.Optional(
-                CONF_DEVICE_TYPE_MAP,
-                default=current.get(CONF_DEVICE_TYPE_MAP, ""),
-            ): selector.TextSelector(selector.TextSelectorConfig(multiline=True)),
-        }
+    return vol.All(
+        vol.Schema(
+            {
+                vol.Required(
+                    CONF_EXPORT_DIR, default=current.get(CONF_EXPORT_DIR, DEFAULT_EXPORT_DIR)
+                ): selector.TextSelector(),
+                vol.Required(
+                    CONF_OBSIDIAN_BASE,
+                    default=current.get(CONF_OBSIDIAN_BASE, DEFAULT_OBSIDIAN_BASE),
+                ): selector.TextSelector(),
+                vol.Required(
+                    CONF_MERGE_MODE, default=current.get(CONF_MERGE_MODE, DEFAULT_MERGE_MODE)
+                ): selector.SelectSelector(
+                    {
+                        "options": [
+                            selector.SelectOptionDict(
+                                value=MERGE_MODE_MERGE, label="Vorhandene aktualisieren (handgepflegte Felder behalten)"
+                            ),
+                            selector.SelectOptionDict(value=MERGE_MODE_CREATE_ONLY, label="Nur neue Notizen anlegen"),
+                        ]
+                    }
+                ),
+                vol.Required(
+                    CONF_AUTO_UPDATE, default=current.get(CONF_AUTO_UPDATE, DEFAULT_AUTO_UPDATE)
+                ): selector.BooleanSelector(),
+                vol.Optional(
+                    CONF_SCHEDULE_ENABLED,
+                    default=current.get(CONF_SCHEDULE_ENABLED, DEFAULT_SCHEDULE_ENABLED),
+                ): selector.BooleanSelector(),
+                vol.Optional(
+                    CONF_SCHEDULE_TIME,
+                    default=current.get(CONF_SCHEDULE_TIME, DEFAULT_SCHEDULE_TIME),
+                ): selector.TimeSelector(),
+                vol.Optional(
+                    CONF_NOTIFY_SERVICE,
+                    default=current.get(CONF_NOTIFY_SERVICE, DEFAULT_NOTIFY_SERVICE),
+                ): selector.TextSelector(),
+                vol.Optional(
+                    CONF_IGNORED_DEVICES,
+                    default=current.get(CONF_IGNORED_DEVICES, ""),
+                ): selector.TextSelector(selector.TextSelectorConfig(multiline=True)),
+                vol.Optional(
+                    CONF_FORCE_INCLUDE,
+                    default=current.get(CONF_FORCE_INCLUDE, ""),
+                ): selector.TextSelector(selector.TextSelectorConfig(multiline=True)),
+                vol.Optional(
+                    CONF_ONLY_AREAS,
+                    default=current.get(CONF_ONLY_AREAS, ""),
+                ): selector.TextSelector(selector.TextSelectorConfig(multiline=True)),
+                vol.Optional(
+                    CONF_TYPE_MAP,
+                    default=current.get(CONF_TYPE_MAP, ""),
+                ): selector.TextSelector(selector.TextSelectorConfig(multiline=True)),
+                vol.Optional(
+                    CONF_DEVICE_TYPE_MAP,
+                    default=current.get(CONF_DEVICE_TYPE_MAP, ""),
+                ): selector.TextSelector(selector.TextSelectorConfig(multiline=True)),
+            }
+        ),
+        extra=vol.PREVENT_EXTRA,
     )
 
 
