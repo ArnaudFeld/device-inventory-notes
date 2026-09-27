@@ -458,7 +458,7 @@ class DeviceNoteGeneratorTests(unittest.TestCase):
             self.assertEqual(index.name, OVERVIEW_ROOT_FILENAME)
             for path in root.rglob("*.md"):
                 text = path.read_text(encoding="utf-8")
-                self.assertNotIn("note_type:", text)
+                # note_type is deliberate here: the pages are collections.
                 self.assertNotIn("entity_type:", text)
                 self.assertNotIn("updated:", text)
                 self.assertNotIn("status:", text)
@@ -480,6 +480,71 @@ class DeviceNoteGeneratorTests(unittest.TestCase):
             self.assertEqual(set(root.rglob("*.md")), expected)
             for path in expected:
                 self.assertIn("```dataview", path.read_text(encoding="utf-8"))
+
+    def test_overviews_are_marked_as_collections(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            generator = self._generator(root)
+
+            generator._write_overviews(root)
+
+            pages = [root / OVERVIEW_ROOT_FILENAME] + [
+                root / proto / f"01-Übersicht {proto}.md"
+                for proto in const_module.OVERVIEW_PROTOCOLS
+            ]
+            self.assertEqual(len(pages), 7)
+            for path in pages:
+                frontmatter = path.read_text(encoding="utf-8").split("---")[1]
+                self.assertEqual(
+                    frontmatter.strip().splitlines()[0],
+                    "note_type: collection",
+                    f"{path.name} startet nicht mit note_type: collection",
+                )
+                self.assertIn("note_type: collection", frontmatter)
+                self.assertIn("aliases: []", frontmatter)
+
+    def test_note_type_comes_before_aliases_in_the_overviews(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            generator = self._generator(root)
+
+            generator._write_overviews(root)
+
+            for path in root.rglob("*.md"):
+                frontmatter = path.read_text(encoding="utf-8").split("---")[1]
+                self.assertLess(
+                    frontmatter.index("note_type:"),
+                    frontmatter.index("aliases:"),
+                    f"{path.name}: note_type steht nicht vor aliases",
+                )
+
+    def test_typ_falls_back_to_the_protocol_without_a_device_kind(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            generator = self._generator(root)
+            # Neither _match_device_type nor _infer_type_custom can help:
+            # no override lines, no entity domains at all.
+            self.assertEqual(generator.custom_device_type_map, {})
+            self._write(generator, root, self._device(), "Actor", set())
+
+            fields, _body = parse_note(
+                (root / "Zigbee" / "Actor.md").read_text(encoding="utf-8")
+            )
+
+            self.assertEqual(fields["typ"], "Zigbee")
+
+    def test_derivable_device_kind_survives_the_protocol_fallback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            generator = self._generator(root)
+            self._write(generator, root, self._device(), "Actor", {"light"})
+
+            fields, _body = parse_note(
+                (root / "Zigbee" / "Actor.md").read_text(encoding="utf-8")
+            )
+
+            self.assertEqual(fields["typ"], "Lampe")
+            self.assertNotEqual(fields["typ"], "Zigbee")
 
     def test_resolve_protocol_uses_the_config_entry_id(self):
         device = self._device(config_entry_id="entry-zha")

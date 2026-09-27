@@ -1021,8 +1021,10 @@ class DeviceNoteGenerator:
             computed["typ"] = override_typ
         else:
             inferred_typ = self._infer_type_custom(domains)
-            if inferred_typ:
-                computed["typ"] = inferred_typ
+            # Without a derivable device kind the protocol is the honest
+            # label, so typ is never empty. Layout-independent on purpose:
+            # the protocol stays the fallback in the area layout too.
+            computed["typ"] = inferred_typ or protocol
 
         # Graph link to the protocol overview (Obsidian parses wikilinks in
         # frontmatter values, quoted or not). Always protocol-based, even in
@@ -1230,6 +1232,7 @@ class DeviceNoteGenerator:
         ]
         root_lines = [
             "---",
+            "note_type: collection",
             "aliases: []",
             "---",
             "",
@@ -1272,6 +1275,7 @@ class DeviceNoteGenerator:
             )
             proto_lines = [
                 "---",
+                "note_type: collection",
                 "aliases: []",
                 "---",
                 "",
