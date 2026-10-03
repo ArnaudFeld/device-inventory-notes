@@ -239,6 +239,68 @@ class TranslationsTest(unittest.TestCase):
         )
 
 
+class ReadmeMatchesCodeTest(unittest.TestCase):
+    """The READMEs name fields the generator writes.
+
+    A stale README is invisible to the test suite and to Home Assistant. Both
+    have already drifted once: the docs still claimed an empty type field after
+    the fallback to the protocol name landed.
+    """
+
+    READMES = ("README.md", "README.en.md")
+
+    def _const(self):
+        return (COMPONENT_DIR / "const.py").read_text(encoding="utf-8")
+
+    def test_hand_fields_are_documented(self):
+        """Every never-overwritten field belongs in both READMEs."""
+        hand = set(re.findall(r"^\s*HAND_FIELDS.*?\(([^)]*)\)", self._const(), re.M))
+        declared = set()
+        for group in hand:
+            declared.update(re.findall(r'"([a-z_]+)"', group))
+        self.assertTrue(declared, "HAND_FIELDS in const.py nicht gefunden")
+
+        for name in self.READMES:
+            text = (REPO / name).read_text(encoding="utf-8")
+            for field in declared:
+                with self.subTest(readme=name, field=field):
+                    self.assertIn(
+                        f"`{field}`",
+                        text,
+                        f"{name} nennt das Handfeld '{field}' nicht, "
+                        "obwohl der Generator es nie überschreibt",
+                    )
+
+    def test_each_readme_links_to_the_other_language(self):
+        """README.md must offer English and README.en.md must offer German.
+
+        The switcher is a one-line link at the top, so each file has to name
+        the other one, not itself.
+        """
+        for name, other in (("README.md", "README.en.md"),
+                            ("README.en.md", "README.md")):
+            text = (REPO / name).read_text(encoding="utf-8")
+            with self.subTest(readme=name):
+                self.assertIn(f"]({other})", text)
+
+    def test_referenced_images_exist(self):
+        """A README with a broken image link looks broken on the HACS page."""
+        for name in self.READMES:
+            text = (REPO / name).read_text(encoding="utf-8")
+            for ref in re.findall(r"!\[[^\]]*\]\(([^)]+)\)", text):
+                if ref.startswith(("http://", "https://")):
+                    continue
+                with self.subTest(readme=name, image=ref):
+                    self.assertTrue((REPO / ref).is_file(), f"{ref} fehlt")
+
+    def test_installation_names_the_repository(self):
+        """Both READMEs have to carry the HACS repository slug."""
+        for name in self.READMES:
+            text = (REPO / name).read_text(encoding="utf-8")
+            with self.subTest(readme=name):
+                self.assertIn("ArnaudFeld/device-inventory-notes", text)
+
+
 class BrandAssetsTest(unittest.TestCase):
     """Home Assistant shows these in the integration list."""
 
