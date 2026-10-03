@@ -1,6 +1,7 @@
-[![hacs][hacs-badge]][hacs]
-[![License: MIT][license-badge]][license]
-[![Tests][tests-badge]][tests]
+![HACS](https://img.shields.io/badge/HACS-Custom-orange.svg)
+![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.3%2B-blue.svg)
+![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
+![Tests](https://github.com/ArnaudFeld/device-inventory-notes/actions/workflows/tests.yml/badge.svg)
 
 # Device Inventory Notes
 
@@ -13,6 +14,8 @@ technischen Daten aus Home Assistant, und allem, was Home Assistant nicht weiß,
 aus dem Gedächtnis.
 
 Diese Integration macht daraus Notizen.
+
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=ArnaudFeld&repository=device-inventory-notes&category=integration)
 
 ![Gesamtübersicht in Obsidian, Aktoren nach Typ gezählt](docs/uebersicht-dataview.png)
 
@@ -258,9 +261,3 @@ Testabhängigkeit. Ohne sie überspringt sich das Testmodul selbst.
 
 MIT, siehe [LICENSE](LICENSE).
 
-[hacs-badge]: https://img.shields.io/badge/HACS-C41BDF5?style=flat-square
-[hacs]: https://github.com/ArnaudFeld/device-inventory-notes
-[license-badge]: https://img.shields.io/badge/License-MIT-green.svg
-[license]: LICENSE
-[tests-badge]: https://github.com/ArnaudFeld/device-inventory-notes/actions/workflows/tests.yml/badge.svg
-[tests]: https://github.com/ArnaudFeld/device-inventory-notes/actions/workflows/tests.yml
