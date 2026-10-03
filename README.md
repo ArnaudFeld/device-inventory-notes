@@ -80,13 +80,27 @@ Geräte-Override > Domain-Mapping > eingebaute Tabelle > Sensor > leer.
   Zusammenfassung. Der erste Lauf nach der Einrichtung etabliert nur den
   Ausgangsstand und meldet nichts.
 
+## Installation
+
+Über HACS:
+
+1. HACS öffnen → *Integrationen* → Drei-Punkte-Menü →
+   *Eigene Integration hinzufügen*
+2. `ArnaudFeld/device-inventory-notes` als Repository angeben
+3. *Device Inventory Notes* installieren und Home Assistant neu starten
+
+Ohne HACS: `custom_components/device_inventory_notes` nach
+`<config>/custom_components/` kopieren (alternativ das ZIP-Archiv aus dem
+Release entpacken) und Home Assistant neu starten.
+
+Benötigt Home Assistant 2024.3 oder neuer.
+
 ## Einrichtung
 
-1. Ordner `custom_components/device_inventory_notes` nach
-   `<config>/custom_components/` kopieren und Home Assistant neu starten
-   (oder das ZIP-Archiv im Repository verwenden).
-2. Einstellungen → Geräte & Dienste → Integration hinzufügen →
+1. Einstellungen → Geräte & Dienste → Integration hinzufügen →
    **Device Inventory Notes**.
+2. Im Konfigurationsdialog Export-Verzeichnis und Obsidian-Basispfad setzen,
+   Felder auswählen, Reihenfolge festlegen, Zeitplan optional.
 3. Nach der Einrichtung den Trockenlauf testen:
    `Service aufrufen → device_inventory_notes.scan_and_generate` mit
    `dry_run: true` prüft, welche Dateien entstehen würden.
