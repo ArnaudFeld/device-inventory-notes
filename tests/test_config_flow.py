@@ -241,6 +241,47 @@ def _device(
     )
 
 
+class SchemaSerialisableTest(unittest.TestCase):
+    """Home Assistant serialises every flow result for the frontend.
+
+    The serialiser walks the schema and needs a plain vol.Schema whose .schema
+    is the mapping of markers. Wrapping that in vol.All removes the attribute,
+    and the flow answers with a 500 instead of a form. A vol.Schema carrying
+    extra=vol.PREVENT_EXTRA still serialises, so the strictness is free.
+    """
+
+    def _builders(self):
+        return {
+            "_schema_layout": ({CONF_LAYOUT: LAYOUT_PROTOCOL},),
+            "_schema_fields": ({CONF_FIELDS: list(DEFAULT_FIELDS)},),
+            "_schema_order": ({},),
+            "_schema_settings": ({},),
+            "_schema_extra": ({}, {"tasmota": 2}),
+        }
+
+    def test_schemas_are_plain_vol_schema_with_a_marker_mapping(self):
+        for name, args in self._builders().items():
+            with self.subTest(builder=name):
+                schema = getattr(config_flow, name)(*args)
+                self.assertNotIsInstance(
+                    schema, vol.All, "vol.All verliert .schema beim Serialisieren"
+                )
+                self.assertIsInstance(schema, vol.Schema)
+                self.assertIsInstance(
+                    schema.schema,
+                    dict,
+                    "HA erwartet schema.schema als Dict aus Markern",
+                )
+
+    def test_strictness_is_still_enforced(self):
+        """The serialisable form must keep rejecting undeclared keys."""
+        for name, args in self._builders().items():
+            with self.subTest(builder=name):
+                schema = getattr(config_flow, name)(*args)
+                with self.assertRaises(vol.Invalid):
+                    schema({"__unbekannt__": 1})
+
+
 class PreventExtraTest(unittest.TestCase):
     """Every step schema must reject keys it does not declare.
 
