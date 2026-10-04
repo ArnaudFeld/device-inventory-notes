@@ -33,19 +33,20 @@
       },
       "settings": {
         "title": "Weitere Einstellungen",
+        "description": "**Verzeichnisse**\n\n- **Export-Verzeichnis**: relativ zur Konfiguration oder absolut, für die HAOS-Freigabe zum Beispiel `/share/device_inventory_notes`\n- **Obsidian-Basispfad**: der Pfad zu den Protokoll-Ordnern in deiner Vault\n\n**Zuordnungen**, je eine Zeile\n\n- **Typ-Labels**: `domain: Label`, etwa `light: Lampe`\n- **Geräte-Typen**: `Name`, `ID` oder `Modell: Label`\n\n**Filter**, je eine Zeile mit Geräte-ID oder Namensbestandteil\n\n- **Ignorierte Geräte** · **Trotzdem erstellen** · **Nur Bereiche**",
         "data": {
-          "export_dir": "Export-Verzeichnis (relativ zur Konfiguration; absolut für /share möglich, z. B. /share/device_inventory_notes)",
-          "obsidian_base": "Obsidian-Basispfad der Protokoll-Ordner (für die Dataview-Übersichten)",
+          "export_dir": "Export-Verzeichnis",
+          "obsidian_base": "Obsidian-Basispfad",
           "merge_mode": "Merge-Modus",
-          "auto_update": "Automatisch aktualisieren, wenn sich Geräte/Entitäten ändern",
-          "schedule_enabled": "Geplanter Tageslauf (Sicherheitsnetz, auch bei ausgeschaltetem Auto-Update)",
-          "schedule_time": "Uhrzeit des geplanten Tageslaufs",
-          "notify_service": "Benachrichtigungs-Dienst für Push bei Änderungen (z. B. notify.mobile_app_xyz; leer = nur HA-interne Notification)",
-          "ignored_devices": "Ignorierte Geräte (Geräte-ID oder Namensbestandteil, eine je Zeile)",
-          "force_include": "Trotzdem erstellen – z. B. Bridges/Koordinatoren (Geräte-ID oder Namensbestandteil, eine je Zeile)",
-          "only_areas": "Nur Bereiche (Bereichsname oder Namensbestandteil, eine je Zeile; leer = alle)",
-          "type_map": "Typ-Labels überschreiben (Format: domain: Label, eine je Zeile; z. B. light: Lampe)",
-          "device_type_map": "Geräte-Typen überschreiben (Name, ID oder Modell: Label, eine je Zeile; z. B. Weihnachtsbaum: Lichterkette)"
+          "auto_update": "Automatisch aktualisieren",
+          "schedule_enabled": "Geplanter Tageslauf",
+          "schedule_time": "Uhrzeit des Tageslaufs",
+          "notify_service": "Benachrichtigungs-Dienst",
+          "ignored_devices": "Ignorierte Geräte",
+          "force_include": "Trotzdem erstellen",
+          "only_areas": "Nur Bereiche",
+          "type_map": "Typ-Labels",
+          "device_type_map": "Geräte-Typen"
         }
       }
     },
@@ -114,19 +115,20 @@
       },
       "settings": {
         "title": "Weitere Einstellungen",
+        "description": "**Verzeichnisse**\n\n- **Export-Verzeichnis**: relativ zur Konfiguration oder absolut, für die HAOS-Freigabe zum Beispiel `/share/device_inventory_notes`\n- **Obsidian-Basispfad**: der Pfad zu den Protokoll-Ordnern in deiner Vault\n\n**Zuordnungen**, je eine Zeile\n\n- **Typ-Labels**: `domain: Label`, etwa `light: Lampe`\n- **Geräte-Typen**: `Name`, `ID` oder `Modell: Label`\n\n**Filter**, je eine Zeile mit Geräte-ID oder Namensbestandteil\n\n- **Ignorierte Geräte** · **Trotzdem erstellen** · **Nur Bereiche**",
         "data": {
-          "export_dir": "Export-Verzeichnis (relativ zur Konfiguration; absolut für /share möglich, z. B. /share/device_inventory_notes)",
-          "obsidian_base": "Obsidian-Basispfad der Protokoll-Ordner (für die Dataview-Übersichten)",
+          "export_dir": "Export-Verzeichnis",
+          "obsidian_base": "Obsidian-Basispfad",
           "merge_mode": "Merge-Modus",
-          "auto_update": "Automatisch aktualisieren, wenn sich Geräte/Entitäten ändern",
-          "schedule_enabled": "Geplanter Tageslauf (Sicherheitsnetz, auch bei ausgeschaltetem Auto-Update)",
-          "schedule_time": "Uhrzeit des geplanten Tageslaufs",
-          "notify_service": "Benachrichtigungs-Dienst für Push bei Änderungen (z. B. notify.mobile_app_xyz; leer = nur HA-interne Notification)",
-          "ignored_devices": "Ignorierte Geräte (Geräte-ID oder Namensbestandteil, eine je Zeile)",
-          "force_include": "Trotzdem erstellen – z. B. Bridges/Koordinatoren (Geräte-ID oder Namensbestandteil, eine je Zeile)",
-          "only_areas": "Nur Bereiche (Bereichsname oder Namensbestandteil, eine je Zeile; leer = alle)",
-          "type_map": "Typ-Labels überschreiben (Format: domain: Label, eine je Zeile; z. B. light: Lampe)",
-          "device_type_map": "Geräte-Typen überschreiben (Name, ID oder Modell: Label, eine je Zeile; z. B. Weihnachtsbaum: Lichterkette)"
+          "auto_update": "Automatisch aktualisieren",
+          "schedule_enabled": "Geplanter Tageslauf",
+          "schedule_time": "Uhrzeit des Tageslaufs",
+          "notify_service": "Benachrichtigungs-Dienst",
+          "ignored_devices": "Ignorierte Geräte",
+          "force_include": "Trotzdem erstellen",
+          "only_areas": "Nur Bereiche",
+          "type_map": "Typ-Labels",
+          "device_type_map": "Geräte-Typen"
         }
       }
     },

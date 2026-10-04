@@ -33,19 +33,20 @@
       },
       "settings": {
         "title": "Further settings",
+        "description": "**Directories**\n\n- **Export directory**: relative to the configuration or absolute, for the HAOS share for example `/share/device_inventory_notes`\n- **Obsidian base path**: the path to the protocol folders in your vault\n\n**Mappings**, one line each\n\n- **Type labels**: `domain: Label`, for example `light: Lamp`\n- **Device types**: `Name`, `ID` or `Model: Label`\n\n**Filters**, one line each with a device ID or name fragment\n\n- **Ignored devices** · **Force include** · **Only areas**",
         "data": {
-          "export_dir": "Export directory (relative to the config dir; absolute paths like /share/device_inventory_notes work too)",
-          "obsidian_base": "Obsidian base path of the protocol folders (used by the dataview overviews)",
+          "export_dir": "Export directory",
+          "obsidian_base": "Obsidian base path",
           "merge_mode": "Merge mode",
-          "auto_update": "Update automatically when devices/entities change",
-          "schedule_enabled": "Scheduled daily run (safety net, also when auto-update is off)",
-          "schedule_time": "Time of the scheduled daily run",
-          "notify_service": "Notification service for push on changes (e.g. notify.mobile_app_xyz; empty = HA-internal notification only)",
-          "ignored_devices": "Ignored devices (device ID or name fragment, one per line)",
-          "force_include": "Force include – e.g. bridges/coordinators (device ID or name fragment, one per line)",
-          "only_areas": "Only areas (area name or name fragment, one per line; empty = all)",
-          "type_map": "Override type labels (format: domain: label, one per line; e.g. light: Lamp)",
-          "device_type_map": "Override device types (name, ID or model: label, one per line; e.g. Weihnachtsbaum: Lichterkette)"
+          "auto_update": "Update automatically",
+          "schedule_enabled": "Scheduled daily run",
+          "schedule_time": "Time of the daily run",
+          "notify_service": "Notification service",
+          "ignored_devices": "Ignored devices",
+          "force_include": "Force include",
+          "only_areas": "Only areas",
+          "type_map": "Type labels",
+          "device_type_map": "Device types"
         }
       }
     },
@@ -114,19 +115,20 @@
       },
       "settings": {
         "title": "Further settings",
+        "description": "**Directories**\n\n- **Export directory**: relative to the configuration or absolute, for the HAOS share for example `/share/device_inventory_notes`\n- **Obsidian base path**: the path to the protocol folders in your vault\n\n**Mappings**, one line each\n\n- **Type labels**: `domain: Label`, for example `light: Lamp`\n- **Device types**: `Name`, `ID` or `Model: Label`\n\n**Filters**, one line each with a device ID or name fragment\n\n- **Ignored devices** · **Force include** · **Only areas**",
         "data": {
-          "export_dir": "Export directory (relative to the config dir; absolute paths like /share/device_inventory_notes work too)",
-          "obsidian_base": "Obsidian base path of the protocol folders (used by the dataview overviews)",
+          "export_dir": "Export directory",
+          "obsidian_base": "Obsidian base path",
           "merge_mode": "Merge mode",
-          "auto_update": "Update automatically when devices/entities change",
-          "schedule_enabled": "Scheduled daily run (safety net, also when auto-update is off)",
-          "schedule_time": "Time of the scheduled daily run",
-          "notify_service": "Notification service for push on changes (e.g. notify.mobile_app_xyz; empty = HA-internal notification only)",
-          "ignored_devices": "Ignored devices (device ID or name fragment, one per line)",
-          "force_include": "Force include – e.g. bridges/coordinators (device ID or name fragment, one per line)",
-          "only_areas": "Only areas (area name or name fragment, one per line; empty = all)",
-          "type_map": "Override type labels (format: domain: label, one per line; e.g. light: Lamp)",
-          "device_type_map": "Override device types (name, ID or model: label, one per line; e.g. Weihnachtsbaum: Lichterkette)"
+          "auto_update": "Update automatically",
+          "schedule_enabled": "Scheduled daily run",
+          "schedule_time": "Time of the daily run",
+          "notify_service": "Notification service",
+          "ignored_devices": "Ignored devices",
+          "force_include": "Force include",
+          "only_areas": "Only areas",
+          "type_map": "Type labels",
+          "device_type_map": "Device types"
         }
       }
     },
