@@ -105,6 +105,23 @@ def safe_filename(name: str) -> str:
     return cleaned or "Gerät"
 
 
+def _write_text_atomic(path: Path, content: str) -> None:
+    """Write through a temporary file in the same directory, then replace.
+
+    The generator rewrites every note on each run, so a process that dies
+    mid-write would otherwise leave a truncated note behind. Writing into a
+    sibling file first keeps the previous content on disk until the new content
+    is complete, and Path.replace is atomic within a filesystem.
+    """
+    tmp = path.with_name(f".{path.name}.tmp")
+    try:
+        tmp.write_text(content, encoding="utf-8")
+        tmp.replace(path)
+    finally:
+        if tmp.exists():
+            tmp.unlink()
+
+
 def _is_generated_overview(path: Path) -> bool:
     """True for the auto-generated dataview overview pages and the legacy index."""
     name = path.name
@@ -225,6 +242,25 @@ def matches_filter(raw: str, device, name: str) -> bool:
     )
 
 
+def _stringify(value) -> str:
+    """YAML value as the string the note format stores.
+
+    Scalars keep their natural spelling, so true stays true and 12.5 stays
+    12.5. Lists and mappings are dumped back as YAML flow style: str() on a
+    list would produce the Python repr "['a', 'b']", which then gets written
+    into the user's note and destroys the value they typed.
+    """
+    if isinstance(value, str):
+        return value
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return str(value)
+    return yaml.safe_dump(
+        value, allow_unicode=True, default_flow_style=True, sort_keys=False
+    ).strip()
+
+
 def parse_note(text: str) -> tuple[dict[str, str], str] | None:
     """Split a note into (frontmatter fields, body). None if no valid frontmatter."""
     if not text.startswith("---"):
@@ -241,7 +277,7 @@ def parse_note(text: str) -> tuple[dict[str, str], str] | None:
         return None
     if not isinstance(data, dict):
         return None
-    fields = {str(k): str(v) for k, v in data.items() if v is not None}
+    fields = {str(k): _stringify(v) for k, v in data.items() if v is not None}
     body = "\n".join(lines[end + 1 :])
     return fields, body
 
@@ -1208,9 +1244,12 @@ class DeviceNoteGenerator:
         if existing_body:
             content += "\n" + existing_body
         content += "\n"
+        # Write first, then drop the old path. Renaming first would leave the
+        # note empty at its new location if this process dies before the write
+        # lands, and the previous content would already be gone.
+        _write_text_atomic(target, content)
         if action == "renamed":
-            existing_path.rename(target)
-        target.write_text(content, encoding="utf-8")
+            existing_path.unlink()
         return action, target, existing_path
 
     def _write_overviews(self, root: Path) -> Path:

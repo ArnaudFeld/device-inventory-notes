@@ -1088,5 +1088,152 @@ class ChangelogTests(unittest.TestCase):
             self.assertEqual(list(snapshot), ["Zigbee/A.md"])
 
 
+class WriteSafetyTests(unittest.TestCase):
+    """Notes are the user's own files. A half-finished write must not survive.
+
+    The generator rewrites every note on each run, so a process that dies
+    mid-write would leave truncated notes behind. Writing through a temporary
+    file in the same directory and then replacing keeps the old content until
+    the new content is complete on disk.
+    """
+
+    def test_a_failed_write_leaves_the_previous_note_intact(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "Actor.md"
+            target.write_text("OLD", encoding="utf-8")
+
+            with patch.object(Path, "write_text", side_effect=OSError("boom")):
+                with self.assertRaises(OSError):
+                    generator_module._write_text_atomic(target, "NEW")
+
+            self.assertEqual(target.read_text(encoding="utf-8"), "OLD")
+
+    def test_no_temporary_file_is_left_behind_after_a_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "Actor.md"
+            target.write_text("OLD", encoding="utf-8")
+
+            with patch.object(Path, "write_text", side_effect=OSError("boom")):
+                with self.assertRaises(OSError):
+                    generator_module._write_text_atomic(target, "NEW")
+
+            self.assertEqual([p.name for p in Path(directory).iterdir()], ["Actor.md"])
+
+    def test_a_successful_write_replaces_the_content(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "Actor.md"
+            generator_module._write_text_atomic(target, "NEW")
+            self.assertEqual(target.read_text(encoding="utf-8"), "NEW")
+            self.assertEqual([p.name for p in Path(directory).iterdir()], ["Actor.md"])
+
+    def test_a_failed_write_during_a_rename_keeps_the_old_note(self):
+        """The rename must not happen first.
+
+        Moving the note and then writing it leaves the new path empty when the
+        process dies in between, and the old path is already gone.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            helper = DeviceNoteGeneratorTests()
+            generator = helper._generator(root)
+            old = root / "Zigbee" / "Old.md"
+            old.parent.mkdir(parents=True, exist_ok=True)
+            old.write_text('---\nname: "Old"\nnotiz: "Handarbeit"\n---\n', encoding="utf-8")
+            device = helper._device(config_entry_id="entry-zha", name="New")
+
+            with patch.object(
+                generator_module, "_write_text_atomic", side_effect=OSError("boom")
+            ):
+                with self.assertRaises(OSError):
+                    helper._write(
+                        generator, root, device, "New", {"light"},
+                        by_device_id={device.id: old},
+                    )
+
+            self.assertTrue(old.exists(), "alte Notiz wurde vor dem Schreiben entfernt")
+            self.assertIn("Handarbeit", old.read_text(encoding="utf-8"))
+            self.assertFalse((root / "Zigbee" / "New.md").exists())
+
+    def test_a_successful_rename_moves_the_content_to_the_new_name(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            helper = DeviceNoteGeneratorTests()
+            generator = helper._generator(root)
+            old = root / "Zigbee" / "Old.md"
+            old.parent.mkdir(parents=True, exist_ok=True)
+            old.write_text('---\nname: "Old"\nnotiz: "Handarbeit"\n---\n', encoding="utf-8")
+            device = helper._device(config_entry_id="entry-zha", name="New")
+
+            helper._write(
+                generator, root, device, "New", {"light"},
+                by_device_id={device.id: old},
+            )
+
+            new = root / "Zigbee" / "New.md"
+            self.assertFalse(old.exists())
+            self.assertTrue(new.exists())
+            self.assertIn("Handarbeit", new.read_text(encoding="utf-8"))
+
+
+class NonScalarFrontmatterTests(unittest.TestCase):
+    """A hand-written YAML list must not turn into a Python repr.
+
+    str() on a list produces "['a', 'b']", which was written back into the
+    user's note. The value has to keep its YAML spelling.
+    """
+
+    def test_a_list_stays_yaml_flow_style(self):
+        fields, _ = generator_module.parse_note(
+            '---\naliases: [Lampe, Wohnzimmer]\n---\n'
+        )
+        self.assertEqual(fields["aliases"], "[Lampe, Wohnzimmer]")
+        self.assertNotIn("'", fields["aliases"])
+
+    def test_a_mapping_stays_yaml_flow_style(self):
+        fields, _ = generator_module.parse_note('---\nzuordnung: {a: 1}\n---\n')
+        self.assertEqual(fields["zuordnung"], "{a: 1}")
+
+    def test_booleans_keep_their_yaml_spelling(self):
+        fields, _ = generator_module.parse_note(
+            '---\nkaufdatum: true\ngarantie_bis: false\n---\n'
+        )
+        self.assertEqual(fields["kaufdatum"], "true")
+        self.assertEqual(fields["garantie_bis"], "false")
+
+    def test_numbers_and_strings_are_untouched(self):
+        fields, _ = generator_module.parse_note(
+            '---\nmenge: 3\npreis: 12.5\nnotiz: "Text"\n---\n'
+        )
+        self.assertEqual(fields["menge"], "3")
+        self.assertEqual(fields["preis"], "12.5")
+        self.assertEqual(fields["notiz"], "Text")
+
+    def test_a_hand_written_list_survives_a_run_unchanged(self):
+        """End to end: the note on disk keeps the value the user typed."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            helper = DeviceNoteGeneratorTests()
+            generator = helper._generator(root)
+            device = helper._device(config_entry_id="entry-zha")
+
+            helper._write(generator, root, device, "Actor", {"light"})
+            note = root / "Zigbee" / "Actor.md"
+            note.write_text(
+                note.read_text(encoding="utf-8").replace(
+                    'notiz: ""', 'notiz: ""\naliases: [Lampe, Wohnzimmer]'
+                ),
+                encoding="utf-8",
+            )
+
+            helper._write(generator, root, device, "Actor", {"light"})
+
+            second = note.read_text(encoding="utf-8")
+            self.assertIn('[Lampe, Wohnzimmer]', second)
+            self.assertNotIn("'[Lampe", second)
+            third = note.read_text(encoding="utf-8")
+            helper._write(generator, root, device, "Actor", {"light"})
+            self.assertEqual(note.read_text(encoding="utf-8"), third)
+
+
 if __name__ == "__main__":
     unittest.main()
