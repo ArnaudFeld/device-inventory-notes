@@ -1259,6 +1259,13 @@ class DeviceNoteGenerator:
         overview via a fixed emoji. Each protocol page lists its notes as a
         dataview table. All pages are written even when a protocol folder is
         empty, so the Kategorien links always resolve.
+
+        The root page also links the changelog. A file nothing links to shows
+        up as an isolated node in the Obsidian graph, and the changelog is
+        written without a heading, so it needs the link from here: _write_changelog
+        rewrites the file and keeps only the "## " sections. For the same reason
+        the changelog is excluded from the typ table, where it would appear as
+        an empty group because it has no frontmatter.
         """
         protocol_filenames = {
             proto: OVERVIEW_FILENAME_TEMPLATE.format(proto=proto)
@@ -1284,12 +1291,16 @@ class DeviceNoteGenerator:
             f'FROM "{self.obsidian_base}"',
             "WHERE file.path != this.file.path ",
             '  AND !startswith(file.name, "01-Übersicht")',
+            f'  AND file.name != "{CHANGELOG_FILENAME}"',
             "GROUP BY typ",
             "SORT typ ASC",
             "```",
             "",
             "## Kategorien",
             *kategorien,
+            "",
+            "## Verlauf",
+            f"- [[{CHANGELOG_FILENAME[:-3]}|📋 Änderungen]]",
             "",
         ]
         root_target = root / OVERVIEW_ROOT_FILENAME

@@ -61,6 +61,7 @@ CONF_FIELD_ORDER = const_module.CONF_FIELD_ORDER
 SELECTABLE_FIELDS = const_module.SELECTABLE_FIELDS
 OVERVIEW_ROOT_FILENAME = const_module.OVERVIEW_ROOT_FILENAME
 LEGACY_INDEX_FILENAME = const_module.LEGACY_INDEX_FILENAME
+CHANGELOG_FILENAME = const_module.CHANGELOG_FILENAME
 MIRROR_DIRNAME = generator_module.MIRROR_DIRNAME
 parse_note = generator_module.parse_note
 serialize_note = generator_module.serialize_note
@@ -517,6 +518,50 @@ class DeviceNoteGeneratorTests(unittest.TestCase):
                     frontmatter.index("aliases:"),
                     f"{path.name}: note_type steht nicht vor aliases",
                 )
+
+    def test_the_root_overview_links_to_the_changelog(self):
+        """Der Changelog ohne Link waere im Obsidian-Graph eine Insel."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            generator = self._generator(root)
+
+            index = generator._write_overviews(root)
+
+            text = index.read_text(encoding="utf-8")
+            self.assertIn(
+                f"[[{CHANGELOG_FILENAME[:-3]}|",
+                text,
+                "Die Übersicht verlinkt das Changelog nicht",
+            )
+
+    def test_the_root_overview_excludes_the_changelog_from_the_table(self):
+        """Das Changelog hat kein typ und tauft sonst als leere Gruppe auf."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            generator = self._generator(root)
+
+            index = generator._write_overviews(root)
+
+            text = index.read_text(encoding="utf-8")
+            self.assertIn(
+                f'file.name != "{CHANGELOG_FILENAME}"',
+                text,
+                "Die Dataview-Abfrage schließt das Changelog nicht aus",
+            )
+
+    def test_the_protocol_pages_keep_linking_back_to_the_root(self):
+        """Gegenprobe: nur die Wurzel verlinkt das Changelog."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            generator = self._generator(root)
+
+            generator._write_overviews(root)
+
+            for proto in const_module.OVERVIEW_PROTOCOLS:
+                page = root / proto / f"01-Übersicht {proto}.md"
+                text = page.read_text(encoding="utf-8")
+                self.assertIn(f"[[{OVERVIEW_ROOT_FILENAME[:-3]}|", text)
+                self.assertNotIn(CHANGELOG_FILENAME[:-3], text)
 
     def test_typ_falls_back_to_the_protocol_without_a_device_kind(self):
         with tempfile.TemporaryDirectory() as directory:
